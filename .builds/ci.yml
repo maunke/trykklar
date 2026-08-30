@@ -1,0 +1,14 @@
+image: archlinux
+packages:
+  - rustup
+  - cargo-binstall
+sources:
+  - "https://git.sr.ht/~maunke/trykklar"
+tasks:
+  - setup: |
+      rustup default 1.95
+      rustup toolchain install nightly --component rustfmt
+      cargo binstall --no-confirm cargo-nextest cargo-deny dprint
+  - validate: |
+      cd trykklar
+      cargo xtask validate

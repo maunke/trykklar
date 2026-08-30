@@ -1,0 +1,32 @@
+[workspace]
+members = ["trykklar", "trykklar-pdf", "xtask"]
+default-members = ["trykklar", "trykklar-pdf"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.1"
+authors = ["Markus Unkel <markus@markusunkel.com>"]
+categories = ["graphics"]
+edition = "2024"
+keywords = ["pdf", "preflight", "prepress", "print", "color"]
+license = "MIT OR Apache-2.0"
+repository = "https://git.sr.ht/~maunke/trykklar"
+rust-version = "1.95"
+description = "A PDF preflight engine for packaging artwork."
+
+[workspace.dependencies]
+lopdf = { version = "0.44.0" }
+thiserror = { version = "2.0.20" }
+trykklar-pdf = { path = "trykklar-pdf", version = "0.0.1" }
+
+# Used for xtask tooling
+[profile.light]
+inherits = "dev"
+opt-level = 1
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

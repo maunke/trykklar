@@ -1,0 +1,14 @@
+# output
+target/
+
+*.pdf
+*.ai
+
+# include tests assets folder files
+!**/tests/assets/*
+
+# macos
+.DS_Store
+
+# editor
+.helix

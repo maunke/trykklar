@@ -1,0 +1,17 @@
+[package]
+name = "trykklar-pdf"
+version.workspace = true
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A low-level PDF representation and content-stream walker for preflight tooling."
+
+[dependencies]
+hayro-jpeg2000 = { version = "0.4.0" }
+lopdf = { workspace = true }
+md5 = "0.8.1"
+thiserror = { workspace = true }
