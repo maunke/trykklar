@@ -32,6 +32,8 @@ enum Commands {
     Test,
     /// Validate
     Validate,
+    /// Git Config for Contributors
+    GitConfig,
 }
 
 fn main() {
@@ -52,6 +54,7 @@ fn try_main() -> Result<()> {
             tasks::lint()?;
             tasks::test()?;
         }
+        Commands::GitConfig => tasks::gitconfig()?,
     }
     Ok(())
 }
