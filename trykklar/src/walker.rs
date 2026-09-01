@@ -46,8 +46,8 @@ impl<'a> PageWalker<'a> {
     }
 
     /// Returns the page walker with given oc config.
-    pub fn with_oc_config(mut self, config: Option<OcConfig>) -> Self {
-        self.oc_config = config;
+    pub fn with_oc_config(mut self, config: OcConfig) -> Self {
+        self.oc_config = Some(config);
         self
     }
 
