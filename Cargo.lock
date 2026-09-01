@@ -1002,6 +1002,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "trykklar-examples"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "trykklar",
+]
+
+[[package]]
 name = "trykklar-pdf"
 version = "0.0.1"
 dependencies = [

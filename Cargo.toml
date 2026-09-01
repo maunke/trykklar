@@ -1,6 +1,6 @@
 [workspace]
-members = ["trykklar", "trykklar-pdf", "xtask"]
-default-members = ["trykklar", "trykklar-pdf"]
+members = ["trykklar", "trykklar-examples", "trykklar-pdf", "xtask"]
+default-members = ["trykklar", "trykklar-pdf", "trykklar-examples"]
 resolver = "3"
 
 [workspace.package]
@@ -17,6 +17,7 @@ description = "A PDF preflight engine for packaging artwork."
 [workspace.dependencies]
 lopdf = { version = "0.44.0" }
 thiserror = { version = "2.0.20" }
+trykklar = { path = "trykklar", version = "0.0.1" }
 trykklar-pdf = { path = "trykklar-pdf", version = "0.0.1" }
 
 # Used for xtask tooling
