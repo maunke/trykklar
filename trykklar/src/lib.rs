@@ -10,6 +10,7 @@
 #![warn(missing_docs)]
 mod error;
 mod image;
+pub mod inventory;
 mod trykklar;
 mod walker;
 
