@@ -910,4 +910,58 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn rename_ocgs() -> Result<()> {
+        let mut pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
+        let names = [
+            "Images",
+            "RGB",
+            "Grayscale",
+            "Languages",
+            "English",
+            "German",
+        ];
+        pdf.catalog()?
+            .oc_properties()
+            .unwrap()?
+            .ocgs()
+            .unwrap()
+            .get()
+            .iter()
+            .zip(names.iter())
+            .for_each(|(ocg, name_test)| {
+                assert_eq!(&ocg.name().unwrap(), name_test);
+            });
+
+        // rename ocgs
+        let new_names = names.map(|n| n.to_uppercase());
+        for (ocg, new_name) in pdf
+            .catalog()?
+            .oc_properties()
+            .unwrap()?
+            .ocgs()
+            .unwrap()
+            .get()
+            .iter()
+            .zip(new_names.iter())
+        {
+            let mut ocg_mut = OcgMut::try_new(&mut pdf, ocg.id())?;
+            ocg_mut.set_name(new_name)?;
+        }
+
+        // check renamed ocgs
+        pdf.catalog()?
+            .oc_properties()
+            .unwrap()?
+            .ocgs()
+            .unwrap()
+            .get()
+            .iter()
+            .zip(new_names.iter())
+            .for_each(|(ocg, name_test)| {
+                assert_eq!(&ocg.name().unwrap(), name_test);
+            });
+        Ok(())
+    }
 }
