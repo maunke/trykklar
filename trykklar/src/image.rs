@@ -27,6 +27,7 @@ impl Image for ImageXObject {
 }
 
 /// Dots per inch.
+#[derive(Debug, Clone, Copy)]
 pub struct Dpi {
     x: f64,
     y: f64,
