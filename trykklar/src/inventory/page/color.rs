@@ -1,4 +1,5 @@
 use crate::WalkerProcessor;
+use pdf::color::SeparationName;
 use pdf::{Color, ColorSpace, Operator};
 use std::collections::HashSet;
 
@@ -23,6 +24,35 @@ impl ColorSpacesInventory {
     /// Returns the number of inderterminate colorspace resolvings.
     pub fn inderterminate(&self) -> usize {
         self.inderterminate
+    }
+
+    /// Returns the set of separation names.
+    pub fn separation_names(&self) -> HashSet<SeparationName> {
+        let mut set = HashSet::new();
+        for cs in &self.color_spaces {
+            self.resolve_separation_name_from_cs(cs, &mut set);
+        }
+        set
+    }
+
+    fn resolve_separation_name_from_cs(&self, cs: &ColorSpace, set: &mut HashSet<SeparationName>) {
+        match cs {
+            ColorSpace::Separation(separation) => {
+                set.insert(separation.name().clone());
+            }
+            ColorSpace::DeviceN(device_n) => {
+                for name in device_n.names() {
+                    set.insert(name.clone());
+                }
+            }
+            ColorSpace::Indexed(indexed) => {
+                self.resolve_separation_name_from_cs(indexed.base(), set);
+            }
+            ColorSpace::Pattern(Some(colorspace)) => {
+                self.resolve_separation_name_from_cs(colorspace, set);
+            }
+            _ => {}
+        }
     }
 
     fn register_paint(&mut self, cs: &pdf::Result<ColorSpace>, color: &pdf::Result<Color>) {
