@@ -15,7 +15,7 @@ rust-version = "1.95"
 description = "A PDF preflight engine for packaging artwork."
 
 [workspace.dependencies]
-lopdf = { version = "0.44.0" }
+lopdf = { version = "0.45.0" }
 thiserror = { version = "2.0.20" }
 trykklar = { path = "trykklar", version = "0.0.1" }
 trykklar-pdf = { path = "trykklar-pdf", version = "0.0.1" }
