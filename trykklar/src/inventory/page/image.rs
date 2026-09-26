@@ -2,6 +2,7 @@ use crate::{Dpi, Image, WalkerProcessor};
 use pdf::{BBox, ImageXObject, Operator, PhysicalUnit, Rect, UserSpace, UserUnit};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 pub struct PaintedImage {
     xobject: Arc<ImageXObject>,
     dpi: Dpi,
@@ -27,7 +28,7 @@ impl PaintedImage {
 }
 
 /// Contains the painted images
-#[derive(Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ImagesInventory {
     images: Vec<PaintedImage>,
     inderterminate: usize,

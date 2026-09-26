@@ -4,7 +4,7 @@ use pdf::{Color, ColorSpace, Operator};
 use std::collections::HashSet;
 
 /// The set all all color spaces painted on a page.
-#[derive(Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ColorSpacesInventory {
     color_spaces: HashSet<ColorSpace>,
     inderterminate: usize,
