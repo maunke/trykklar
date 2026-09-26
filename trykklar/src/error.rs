@@ -28,7 +28,7 @@ impl From<FieldError> for Error {
 }
 
 /// Error
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
     /// Trykklar PDF error
     #[error(transparent)]
