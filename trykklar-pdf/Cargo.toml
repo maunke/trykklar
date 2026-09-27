@@ -11,6 +11,7 @@ rust-version.workspace = true
 description = "A low-level PDF representation and content-stream walker for preflight tooling."
 
 [dependencies]
+chrono = { workspace = true }
 hayro-jpeg2000 = { version = "0.4.0" }
 lopdf = { workspace = true }
 md5 = "0.8.1"

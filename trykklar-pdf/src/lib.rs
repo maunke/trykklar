@@ -16,6 +16,7 @@ pub mod extgstate;
 pub mod font;
 pub mod geometry;
 pub mod id;
+pub mod info;
 pub mod matrix;
 pub mod ocg;
 pub mod page;

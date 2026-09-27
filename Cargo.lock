@@ -865,6 +865,7 @@ dependencies = [
 name = "trykklar-pdf"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "hayro-jpeg2000",
  "lopdf",
  "md5",

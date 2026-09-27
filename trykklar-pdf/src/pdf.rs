@@ -1,5 +1,6 @@
 //! PDF Document
 use crate::dict::read_optional_field;
+use crate::info::{Info, InfoId};
 use crate::ocg::OCProperties;
 use crate::page::{PdfPage, PdfPageId, PdfPageMut};
 use crate::{Error, Result, object_id};
@@ -40,6 +41,28 @@ impl Pdf {
                 _ => Err(Error::InvalidPdfObject("catalog needs to be a dictionary")),
             },
             Err(_) => Err(Error::CatalogNotFound),
+        }
+    }
+
+    /// Returns the trailer info.
+    ///
+    /// ISO 32000-1:2008 Table 15 – Entries in the file trailer dictionary
+    ///
+    /// > (Optional; shall be an indirect reference) The document’s information dictionary (see
+    /// > 14.3.3, "Document Information Dictionary").
+    pub fn info(&self) -> Option<Result<Info<'_>>> {
+        match self.doc.trailer.get(b"Info") {
+            Ok(obj) => match self.doc.dereference(obj) {
+                Ok((Some(id), Object::Dictionary(dict))) => Some(Ok(Info {
+                    doc: &self.doc,
+                    id: InfoId::new(id),
+                    dict,
+                })),
+                _ => Some(Err(Error::InvalidPdfObject(
+                    "trailer info needs to be a dictionary",
+                ))),
+            },
+            Err(_) => None,
         }
     }
 
