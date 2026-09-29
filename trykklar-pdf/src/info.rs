@@ -1,10 +1,10 @@
 //! Document Information Dictionary
 
 use crate::codec::TryFromObject;
+use crate::datetime::PdfDate;
 use crate::dict::{DictKey, read_optional_field};
 use crate::error::OptionalField;
-use crate::{Error, Result, object_id};
-use chrono::{DateTime, FixedOffset, Utc};
+use crate::{Result, object_id};
 use lopdf::{Dictionary, Document, decode_text_string};
 
 object_id!(InfoId);
@@ -252,11 +252,11 @@ impl TryFromObject<'_> for Producer {
 ///
 /// > (Optional) The date and time the document was created, in human-readable form (see 7.9.4,
 /// > “Dates”).
-pub struct CreationDate(DateTime<Utc>);
+pub struct CreationDate(PdfDate);
 
 impl CreationDate {
     /// Returns the creation date.
-    pub fn get(&self) -> &DateTime<Utc> {
+    pub fn get(&self) -> &PdfDate {
         &self.0
     }
 }
@@ -267,19 +267,11 @@ impl DictKey for CreationDate {
 
 impl TryFromObject<'_> for CreationDate {
     fn try_from_object(
-        _doc: &'_ Document,
-        _id: Option<lopdf::ObjectId>,
+        doc: &'_ Document,
+        id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
-        let Some(creation_date_raw) = obj.as_datetime() else {
-            return Err(Error::InvalidPdfObject("datetime is not provided"));
-        };
-        let creation_date_offset: DateTime<FixedOffset> = match creation_date_raw.try_into() {
-            Ok(t) => t,
-            Err(_) => return Err(Error::InvalidPdfObject("datetime not valid")),
-        };
-
-        let creation_date = creation_date_offset.into();
+        let creation_date = PdfDate::try_from_object(doc, id, obj)?;
         Ok(Self(creation_date))
     }
 }
@@ -291,11 +283,11 @@ impl TryFromObject<'_> for CreationDate {
 /// > Required if PieceInfo is present in the document catalogue; otherwise optional; PDF 1.1) The
 /// > date and time the document was most recently modified, in human-readable form (see 7.9.4,
 /// > “Dates”).
-pub struct ModDate(DateTime<Utc>);
+pub struct ModDate(PdfDate);
 
 impl ModDate {
     /// Returns the modified date.
-    pub fn get(&self) -> &DateTime<Utc> {
+    pub fn get(&self) -> &PdfDate {
         &self.0
     }
 }
@@ -306,19 +298,11 @@ impl DictKey for ModDate {
 
 impl TryFromObject<'_> for ModDate {
     fn try_from_object(
-        _doc: &'_ Document,
-        _id: Option<lopdf::ObjectId>,
+        doc: &'_ Document,
+        id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
-        let Some(mod_date_raw) = obj.as_datetime() else {
-            return Err(Error::InvalidPdfObject("datetime is not provided"));
-        };
-        let mod_date_offset: DateTime<FixedOffset> = match mod_date_raw.try_into() {
-            Ok(t) => t,
-            Err(_) => return Err(Error::InvalidPdfObject("datetime not valid")),
-        };
-
-        let mod_date = mod_date_offset.into();
+        let mod_date = PdfDate::try_from_object(doc, id, obj)?;
         Ok(Self(mod_date))
     }
 }
@@ -344,8 +328,8 @@ mod tests {
 
         let creation_date = info.creation_date().expect("creation_date must exist")?;
         assert_eq!(
-            creation_date.get().to_rfc3339(),
-            "2022-08-17T08:13:02+00:00"
+            creation_date.get().to_rfc3339()?,
+            "2022-08-17T10:13:02+02:00"
         );
         Ok(())
     }

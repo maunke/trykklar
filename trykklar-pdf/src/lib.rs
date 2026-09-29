@@ -10,6 +10,7 @@
 mod codec;
 pub mod color;
 pub mod content;
+pub mod datetime;
 mod dict;
 pub mod error;
 pub mod extgstate;

@@ -1,5 +1,6 @@
 //! Error and Result types
 use lopdf::ObjectId;
+use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -110,6 +111,15 @@ pub enum Error {
     /// Explicit unsupported spec.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+    /// Date parsing error
+    #[error("date parsing error")]
+    DateParsing,
+    /// Date formatting error
+    #[error("date formatting error")]
+    DateFormat,
+    /// Int parsing error
+    #[error("int parsing error")]
+    IntParsing(#[from] TryFromIntError),
 }
 
 /// Object type Kind
