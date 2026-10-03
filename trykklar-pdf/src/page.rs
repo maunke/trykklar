@@ -106,6 +106,24 @@ impl<'a> PdfPage<'a> {
             }
         }
     }
+
+    /// Returns the trim box.
+    pub fn art_box<U: PhysicalUnit>(&self) -> Result<ArtBox<U>> {
+        match read_optional_field::<ArtBox<UserSpace>>(self.doc, self.dict) {
+            Some(value) => {
+                let art_box = value?;
+                let rect = art_box.get();
+                let uu = self.user_unit()?;
+                Ok(ArtBox(rect.to_physical(uu)))
+            }
+            None => {
+                // Default of ArtBox is CropBox
+                let crop_box = self.crop_box()?;
+                let rect = crop_box.get();
+                Ok(ArtBox(rect))
+            }
+        }
+    }
 }
 
 /// Mutable page object.
@@ -270,6 +288,7 @@ page_box!(MediaBox, b"MediaBox", inheritable: true);
 page_box!(CropBox, b"CropBox", inheritable: true);
 page_box!(BleedBox, b"BleedBox", inheritable: false);
 page_box!(TrimBox, b"TrimBox", inheritable: false);
+page_box!(ArtBox, b"ArtBox", inheritable: false);
 
 #[cfg(test)]
 mod tests {
