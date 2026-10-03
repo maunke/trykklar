@@ -1,6 +1,6 @@
 //! PDF Document
 use crate::dict::read_optional_field;
-use crate::info::{Info, InfoId};
+use crate::info::Info;
 use crate::ocg::OCProperties;
 use crate::page::{PdfPage, PdfPageId, PdfPageMut};
 use crate::{Error, Result, object_id};
@@ -54,19 +54,7 @@ impl Pdf {
     /// > (Optional; shall be an indirect reference) The document’s information dictionary (see
     /// > 14.3.3, "Document Information Dictionary").
     pub fn info(&self) -> Option<Result<Info<'_>>> {
-        match self.doc.trailer.get(b"Info") {
-            Ok(obj) => match self.doc.dereference(obj) {
-                Ok((Some(id), Object::Dictionary(dict))) => Some(Ok(Info {
-                    doc: &self.doc,
-                    id: InfoId::new(id),
-                    dict,
-                })),
-                _ => Some(Err(Error::InvalidPdfObject(
-                    "trailer info needs to be a dictionary",
-                ))),
-            },
-            Err(_) => None,
-        }
+        read_optional_field(&self.doc, &self.doc.trailer)
     }
 
     /// Load [Pdf] from `path`.
