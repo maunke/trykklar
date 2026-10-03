@@ -1,7 +1,7 @@
 //! PDF Datetime
-use crate::codec::TryFromObject;
+use crate::codec::{IntoObject, TryFromObject};
 use crate::{Error, Result};
-use lopdf::decode_text_string;
+use lopdf::{decode_text_string, text_string};
 use std::num::NonZero;
 use time::format_description::{BorrowedFormatItem, well_known};
 use time::macros::format_description;
@@ -17,7 +17,7 @@ use time::{Month, OffsetDateTime};
 /// > date shall be a text string of the form
 ///
 /// > (D:YYYYMMDDHHmmSSOHH'mm)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PdfDate(OffsetDateTime);
 
 impl PdfDate {
@@ -25,7 +25,26 @@ impl PdfDate {
     pub fn get(&self) -> &OffsetDateTime {
         &self.0
     }
+
+    /// Creates a new [`PdfDate`].
+    pub fn try_new(date: OffsetDateTime) -> Result<Self> {
+        if !(0..=9999).contains(&date.year()) || date.offset().seconds_past_minute() != 0 {
+            return Err(Error::DateFormat);
+        }
+        Ok(Self(date))
+    }
+
+    /// Creates a now date.
+    pub fn now() -> Self {
+        let date = OffsetDateTime::now_utc();
+        Self(date)
+    }
 }
+
+const PDF_DATE_ENCODE: &[BorrowedFormatItem<'_>] = format_description!(
+    version = 2,
+    "D:[year][month][day][hour][minute][second][offset_hour sign:mandatory]'[offset_minute]"
+);
 
 impl PdfDate {
     /// Returns the rfc 3339 formatted string of the date.
@@ -50,6 +69,12 @@ impl PdfDate {
             Ok(d) => Ok(d),
             _ => Err(Error::DateFormat),
         }
+    }
+
+    fn to_pdf_date_string(&self) -> String {
+        self.0
+            .format(PDF_DATE_ENCODE)
+            .expect("constructor checked correct year and offset without seconds")
     }
 }
 
@@ -120,6 +145,13 @@ impl TryFromObject<'_> for PdfDate {
     }
 }
 
+impl IntoObject for PdfDate {
+    fn into_object(self) -> lopdf::Object {
+        let date_string = self.to_pdf_date_string();
+        text_string(&date_string)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +177,15 @@ mod tests {
         err_checks.iter().for_each(|c| {
             assert!(PdfDate::try_from(c.to_string()).is_err());
         });
+        Ok(())
+    }
+
+    #[test]
+    fn pdf_date_encoding() -> Result<()> {
+        let date = datetime!(2026-10-03 13:37:42 +0);
+        let pdf_date = PdfDate::try_new(date)?;
+        let pdf_date_string = pdf_date.to_pdf_date_string();
+        assert_eq!(pdf_date_string, "D:20261003133742+00'00");
         Ok(())
     }
 }
