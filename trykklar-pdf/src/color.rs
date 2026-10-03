@@ -161,13 +161,13 @@ impl ColorSpace {
 /// > DeviceN. The remaining elements shall be parameters that a DeviceN colour space requires.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DeviceN {
-    names: Vec<SeparationName>,
+    names: Vec<ColorantName>,
     alternate: ColorSpace,
 }
 
 impl DeviceN {
     /// Creates a new DeviceN color space, requiring names vec to be not empty.
-    pub fn try_new(names: Vec<SeparationName>, alternate: ColorSpace) -> Result<Self> {
+    pub fn try_new(names: Vec<ColorantName>, alternate: ColorSpace) -> Result<Self> {
         if names.is_empty() {
             return Err(Error::InvalidColorSpace);
         }
@@ -175,7 +175,7 @@ impl DeviceN {
     }
 
     /// Returns the names slice.
-    pub fn names(&self) -> &[SeparationName] {
+    pub fn names(&self) -> &[ColorantName] {
         &self.names
     }
 
@@ -432,13 +432,13 @@ impl TryFrom<i64> for IccComponents {
 /// > `[ /Separation name alternateSpace tintTransform ]`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Separation {
-    pub(crate) name: SeparationName,
+    pub(crate) name: ColorantName,
     pub(crate) alternate: ColorSpace,
 }
 
 impl Separation {
     /// Returns the name of the separation.
-    pub fn name(&self) -> &SeparationName {
+    pub fn name(&self) -> &ColorantName {
         &self.name
     }
 
@@ -448,7 +448,7 @@ impl Separation {
     }
 }
 
-/// Separation Name
+/// Colorant Name
 ///
 /// ISO 3200-1:2008 8.6.6.4 Separation Colour Spaces
 ///
@@ -465,7 +465,7 @@ impl Separation {
 /// > ignore the alternateSpace and tintTransform parameters (discussed below), although valid
 /// > values shall still be provided.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SeparationName {
+pub enum ColorantName {
     /// > The special colorant name All shall refer collectively to all colorants available on an
     /// > output device, including those for the standard process colorants. When a Separation space
     /// > with this colorant name is the current colour space, painting operators shall apply tint
@@ -474,7 +474,7 @@ pub enum SeparationName {
     /// > The special colorant name None shall not produce any visible output. Painting operations
     /// > in a Separation space with this colorant name shall have no effect on the current page.
     None,
-    /// Separation name
+    /// Colorant name
     Name(String),
 }
 
@@ -613,13 +613,13 @@ impl ColorSpace {
                         let Some(arr_el) = arr.get(1) else {
                             return Err(Error::InvalidColorSpace);
                         };
-                        let separation_bytes = deref_name(arr_el, doc)?;
+                        let colorant_bytes = deref_name(arr_el, doc)?;
 
-                        let separation_name = match separation_bytes {
-                            b"All" => SeparationName::All,
-                            b"None" => SeparationName::None,
+                        let colorant_name = match colorant_bytes {
+                            b"All" => ColorantName::All,
+                            b"None" => ColorantName::None,
                             other => {
-                                SeparationName::Name(String::from_utf8_lossy(other).into_owned())
+                                ColorantName::Name(String::from_utf8_lossy(other).into_owned())
                             }
                         };
                         let alternate = Self::parse_object(
@@ -630,7 +630,7 @@ impl ColorSpace {
                         )?;
                         Self::Separation(
                             Separation {
-                                name: separation_name,
+                                name: colorant_name,
                                 alternate,
                             }
                             .into(),
@@ -641,17 +641,17 @@ impl ColorSpace {
                             return Err(Error::InvalidColorSpace);
                         };
                         let name_objects = deref_array(arr_el, doc)?;
-                        let mut names: Vec<SeparationName> = Vec::new();
+                        let mut names: Vec<ColorantName> = Vec::new();
                         for name_obj in name_objects {
                             let name_bytes = deref_name(name_obj, doc)?;
-                            let separation_name = match name_bytes {
+                            let colorant_name = match name_bytes {
                                 b"All" => return Err(Error::InvalidColorSpace),
-                                b"None" => SeparationName::None,
-                                other => SeparationName::Name(
-                                    String::from_utf8_lossy(other).into_owned(),
-                                ),
+                                b"None" => ColorantName::None,
+                                other => {
+                                    ColorantName::Name(String::from_utf8_lossy(other).into_owned())
+                                }
                             };
-                            names.push(separation_name);
+                            names.push(colorant_name);
                         }
                         let alternate = Self::parse_object(
                             arr.get(2).ok_or(Error::InvalidColorSpace)?,

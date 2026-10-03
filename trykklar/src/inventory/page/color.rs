@@ -1,5 +1,5 @@
 use crate::WalkerProcessor;
-use pdf::color::SeparationName;
+use pdf::color::ColorantName;
 use pdf::{Color, ColorSpace, Operator};
 use std::collections::HashSet;
 
@@ -26,16 +26,16 @@ impl ColorSpacesInventory {
         self.inderterminate
     }
 
-    /// Returns the set of separation names.
-    pub fn separation_names(&self) -> HashSet<SeparationName> {
+    /// Returns the set of colorant names.
+    pub fn colorant_names(&self) -> HashSet<ColorantName> {
         let mut set = HashSet::new();
         for cs in &self.color_spaces {
-            self.resolve_separation_name_from_cs(cs, &mut set);
+            self.resolve_colorant_name_from_cs(cs, &mut set);
         }
         set
     }
 
-    fn resolve_separation_name_from_cs(&self, cs: &ColorSpace, set: &mut HashSet<SeparationName>) {
+    fn resolve_colorant_name_from_cs(&self, cs: &ColorSpace, set: &mut HashSet<ColorantName>) {
         match cs {
             ColorSpace::Separation(separation) => {
                 set.insert(separation.name().clone());
@@ -46,10 +46,10 @@ impl ColorSpacesInventory {
                 }
             }
             ColorSpace::Indexed(indexed) => {
-                self.resolve_separation_name_from_cs(indexed.base(), set);
+                self.resolve_colorant_name_from_cs(indexed.base(), set);
             }
             ColorSpace::Pattern(Some(colorspace)) => {
-                self.resolve_separation_name_from_cs(colorspace, set);
+                self.resolve_colorant_name_from_cs(colorspace, set);
             }
             _ => {}
         }

@@ -39,9 +39,9 @@ fn main() -> Result<()> {
         for cs in colorspaces_inventory.color_spaces() {
             println!("- {:?}", cs);
         }
-        println!("\nThe following separation names were used:\n");
-        for separation_name in colorspaces_inventory.separation_names() {
-            println!("- {:?}", separation_name);
+        println!("\nThe following colorant names were used:\n");
+        for colorant_name in colorspaces_inventory.colorant_names() {
+            println!("- {:?}", colorant_name);
         }
 
         println!(
