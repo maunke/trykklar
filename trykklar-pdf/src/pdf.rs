@@ -5,6 +5,9 @@ use crate::ocg::OCProperties;
 use crate::page::{PdfPage, PdfPageId, PdfPageMut};
 use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 /// PDF
 ///
@@ -108,6 +111,19 @@ impl Pdf {
             Some(&id) => Ok(PdfPageMut::new(&mut self.doc, PdfPageId::new(id))),
             None => Err(Error::PageNotFound),
         }
+    }
+
+    /// Save the PDF to a path.
+    pub fn save<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
+        let mut file = BufWriter::new(File::create(path)?);
+        self.doc.save_modern(&mut file)?;
+        Ok(file.into_inner()?)
+    }
+
+    /// Save the PDF to a writer.
+    pub fn save_to<W: Write>(&mut self, writer: &mut W) -> Result<()> {
+        self.doc.save_to(writer)?;
+        Ok(())
     }
 }
 

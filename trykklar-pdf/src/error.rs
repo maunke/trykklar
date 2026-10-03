@@ -1,5 +1,7 @@
 //! Error and Result types
 use lopdf::ObjectId;
+use std::fs::File;
+use std::io::{BufWriter, IntoInnerError};
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -7,6 +9,12 @@ use std::sync::Arc;
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::Io(Arc::new(e))
+    }
+}
+
+impl From<IntoInnerError<BufWriter<File>>> for Error {
+    fn from(e: IntoInnerError<BufWriter<File>>) -> Self {
+        Error::BufWriter(Arc::new(e))
     }
 }
 
@@ -19,6 +27,9 @@ pub enum Error {
     /// IO Error
     #[error("IO error: {0}")]
     Io(#[source] Arc<std::io::Error>),
+    /// BufWriter Error
+    #[error("BufWriter error: {0}")]
+    BufWriter(#[source] Arc<IntoInnerError<BufWriter<File>>>),
     /// Marks wrong object type parsing.
     #[error("wrong type: expected {expected:?}")]
     WrongObjectType {
