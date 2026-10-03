@@ -1,6 +1,7 @@
 //! PDF Document
+use crate::datetime::PdfDate;
 use crate::dict::read_optional_field;
-use crate::info::Info;
+use crate::info::{Info, InfoMut, ModDate};
 use crate::ocg::OCProperties;
 use crate::page::{PdfPage, PdfPageId, PdfPageMut};
 use crate::{Error, Result, object_id};
@@ -101,8 +102,16 @@ impl Pdf {
         }
     }
 
+    fn set_info_mod_date(&mut self) -> Result<()> {
+        let mut info_mut = InfoMut::get_or_create(self)?;
+        let mod_date = ModDate::new(PdfDate::now());
+        info_mut.set_mod_date(mod_date)?;
+        Ok(())
+    }
+
     /// Save the PDF to a path.
     pub fn save<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
+        self.set_info_mod_date()?;
         let mut file = BufWriter::new(File::create(path)?);
         self.doc.save_modern(&mut file)?;
         Ok(file.into_inner()?)
@@ -110,6 +119,7 @@ impl Pdf {
 
     /// Save the PDF to a writer.
     pub fn save_to<W: Write>(&mut self, writer: &mut W) -> Result<()> {
+        self.set_info_mod_date()?;
         self.doc.save_to(writer)?;
         Ok(())
     }
@@ -196,6 +206,21 @@ mod tests {
         [1, 2, u32::MAX].iter().for_each(|&number| {
             assert!(matches!(pdf.page(number), Err(Error::PageNotFound)));
         });
+        Ok(())
+    }
+
+    #[test]
+    fn pdf_save_mod_date() -> Result<()> {
+        let mut pdf = get_pdf();
+        let mut writer = Vec::new();
+        pdf.save_to(&mut writer)?;
+        let pdf = Pdf::load_from_data(&writer)?;
+        let mod_date = pdf
+            .info()
+            .expect("info must exist")?
+            .mod_date()
+            .expect("mod date must exist");
+        assert!(mod_date.is_ok());
         Ok(())
     }
 }
