@@ -81,9 +81,9 @@ impl<'a> PdfPage<'a> {
                 Ok(BleedBox(rect.to_physical(uu)))
             }
             None => {
-                // Default of CropBox is MediaBox
-                let media_box = self.crop_box()?;
-                let rect = media_box.get();
+                // Default of BleedBox is CropBox
+                let crop_box = self.crop_box()?;
+                let rect = crop_box.get();
                 Ok(BleedBox(rect))
             }
         }
@@ -99,15 +99,15 @@ impl<'a> PdfPage<'a> {
                 Ok(TrimBox(rect.to_physical(uu)))
             }
             None => {
-                // Default of CropBox is MediaBox
-                let media_box = self.crop_box()?;
-                let rect = media_box.get();
+                // Default of TrimBox is CropBox
+                let crop_box = self.crop_box()?;
+                let rect = crop_box.get();
                 Ok(TrimBox(rect))
             }
         }
     }
 
-    /// Returns the trim box.
+    /// Returns the art box.
     pub fn art_box<U: PhysicalUnit>(&self) -> Result<ArtBox<U>> {
         match read_optional_field::<ArtBox<UserSpace>>(self.doc, self.dict) {
             Some(value) => {
