@@ -210,6 +210,28 @@ pub struct OcConfig {
     pub(crate) order: Result<DOrder>,
 }
 
+impl PartialEq for OcConfig {
+    fn eq(&self, other: &Self) -> bool {
+        let (Ok(base_state), Ok(on), Ok(off), Ok(order)) = (
+            self.base_state.ok_ref(),
+            self.on.ok_ref(),
+            self.off.ok_ref(),
+            self.order.ok_ref(),
+        ) else {
+            return false;
+        };
+        let (Ok(other_base_state), Ok(other_on), Ok(other_off), Ok(other_order)) = (
+            other.base_state.ok_ref(),
+            other.on.ok_ref(),
+            other.off.ok_ref(),
+            other.order.ok_ref(),
+        ) else {
+            return false;
+        };
+        base_state == other_base_state && on == other_on && off == other_off && order == other_order
+    }
+}
+
 impl DictKey for OcConfig {
     const KEY: &'static [u8] = b"D";
 }
@@ -349,7 +371,7 @@ impl<'a> TryFromObject<'a> for OcConfig {
 ///
 /// > (Optional) An array of optional content groups whose state shall be set to ON when this
 /// > configuration is applied. If the BaseState entry is ON, this entry is redundant.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DOn(HashSet<Ocg>);
 
 impl DOn {
@@ -390,7 +412,7 @@ impl TryFromObject<'_> for DOn {
 ///
 /// > (Optional) An array of optional content groups whose state shall be set to OFF when this
 /// > configuration is applied. If the BaseState entry is OFF, this entry is redundant.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DOff(HashSet<Ocg>);
 
 impl DOff {
@@ -426,7 +448,7 @@ impl TryFromObject<'_> for DOff {
 }
 
 /// An optionally named group of [`DOrderItem`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OcgGroup {
     name: Option<String>,
     items: Vec<DOrderItem>,
@@ -445,7 +467,7 @@ impl OcgGroup {
 }
 
 /// A group of OCGs with an Ocg as header.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OcgSubGroup {
     header: Ocg,
     body: Vec<DOrderItem>,
@@ -464,7 +486,7 @@ impl OcgSubGroup {
 }
 
 /// Find the definition in the parent object [`DOrder`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DOrderItem {
     /// Optional content group [`Ocg`].
     Ocg(Ocg),
@@ -504,7 +526,7 @@ pub enum DOrderItem {
 ///
 /// > Any groups not listed in this array shall not be presented in any user interface that uses the
 /// > configuration.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DOrder(Vec<DOrderItem>);
 
 impl DOrder {
@@ -973,6 +995,25 @@ mod tests {
             .for_each(|(ocg, name_test)| {
                 assert_eq!(&ocg.name().unwrap(), name_test);
             });
+        Ok(())
+    }
+
+    #[test]
+    fn compare_oc_config() -> Result<()> {
+        assert_eq!(OcConfig::default(), OcConfig::default());
+        let oc_config_a = OcConfig::new(
+            BaseState::On,
+            DOn::default(),
+            DOff::default(),
+            DOrder::default(),
+        );
+        let oc_configs_b = OcConfig::new(
+            BaseState::Off,
+            DOn::default(),
+            DOff::default(),
+            DOrder::default(),
+        );
+        assert_ne!(oc_config_a, oc_configs_b);
         Ok(())
     }
 }
