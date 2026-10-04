@@ -214,6 +214,17 @@ impl DictKey for OcConfig {
     const KEY: &'static [u8] = b"D";
 }
 
+impl Default for OcConfig {
+    fn default() -> Self {
+        Self {
+            base_state: Ok(Default::default()),
+            on: Ok(Default::default()),
+            off: Ok(Default::default()),
+            order: Ok(Default::default()),
+        }
+    }
+}
+
 impl OcConfig {
     /// Create an [`OcConfig`] by providing the base state, on / off array and the order.
     pub fn new(base_state: BaseState, on: DOn, off: DOff, order: DOrder) -> Self {
