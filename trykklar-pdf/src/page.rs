@@ -6,7 +6,7 @@ use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
 use crate::unit::{UserSpace, UserUnit};
-use crate::{Error, PhysicalUnit, Result, object_id};
+use crate::{Error, ObjectAsF64, PhysicalUnit, Result, object_id};
 
 object_id!(PdfPageId);
 
@@ -38,6 +38,14 @@ impl<'a> PdfPage<'a> {
         match read_optional_field::<UserUnit>(self.doc, self.dict) {
             Some(value) => value,
             _ => Ok(UserUnit::default()),
+        }
+    }
+
+    /// Returns the page rotation.
+    pub fn rotation(&self) -> Result<PageRotate> {
+        match read_optional_field(self.doc, self.dict) {
+            Some(value) => value,
+            None => Ok(Default::default()),
         }
     }
 
@@ -212,6 +220,64 @@ impl TryFrom<f64> for UserUnit {
             return Err(Error::InvalidUserUnit { value });
         }
         Ok(Self(value))
+    }
+}
+
+/// `/Rotate` Page Rotation
+///
+/// ISO 32000-1:2008 7.7.3.3 Page Objects Table 30 – Entries in a page object
+///
+/// > (Optional; inheritable) The number of degrees by which the page shall be rotated clockwise
+/// > when displayed or printed. The value shall be a multiple of 90.
+/// >
+/// > Default value: 0.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub enum PageRotate {
+    /// Rotate 0 degree clockwise
+    #[default]
+    R0,
+    /// Rotate 90 degrees clockwise
+    R90,
+    /// Rotate 180 degrees clockwise
+    R180,
+    /// Rotate 280 degrees clockwise
+    R270,
+}
+
+impl DictKey for PageRotate {
+    const KEY: &'static [u8] = b"Rotate";
+    const INHERITABLE: bool = true;
+}
+
+impl TryFromObject<'_> for PageRotate {
+    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let degrees_f64 = obj.as_f64()?;
+        Self::try_from(degrees_f64)
+    }
+}
+
+impl TryFrom<f64> for PageRotate {
+    type Error = Error;
+    fn try_from(value: f64) -> std::result::Result<Self, Self::Error> {
+        let degrees = if value.fract() == 0.0 {
+            value as i64
+        } else {
+            return Err(Error::InvalidPdfObject(
+                "rotate must be an integer or a float without a fractional part",
+            ));
+        };
+        let value = match degrees.rem_euclid(360) {
+            0 => Self::R0,
+            90 => Self::R90,
+            180 => Self::R180,
+            270 => Self::R270,
+            _ => {
+                return Err(Error::InvalidPdfObject(
+                    "page rotate must be a multiple of 90",
+                ));
+            }
+        };
+        Ok(value)
     }
 }
 
@@ -531,6 +597,33 @@ mod tests {
         approx_eq(tb_rect.size.height.get(), tb_page_rect.size.height.get());
         approx_eq(tb_rect.origin.x.get(), tb_page_rect.origin.x.get());
         approx_eq(tb_rect.origin.y.get(), tb_page_rect.origin.y.get());
+        Ok(())
+    }
+
+    #[test]
+    fn page_rotate() -> Result<()> {
+        // correct
+        [
+            (0., PageRotate::R0),
+            (90., PageRotate::R90),
+            (-90., PageRotate::R270),
+            (720., PageRotate::R0),
+            (-1440., PageRotate::R0),
+            (540., PageRotate::R180),
+            (-630., PageRotate::R90),
+            (630., PageRotate::R270),
+        ]
+        .into_iter()
+        .for_each(|(deg, check)| assert_eq!(PageRotate::try_from(deg).unwrap(), check));
+
+        // invalid
+        [0.1, 1e-100, f64::NAN, f64::INFINITY]
+            .into_iter()
+            .for_each(|deg| assert!(PageRotate::try_from(deg).is_err()));
+
+        // default value
+        let pdf = get_pdf(None);
+        assert_eq!(pdf.page(0)?.rotation()?, PageRotate::default());
         Ok(())
     }
 }
