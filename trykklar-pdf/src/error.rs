@@ -59,6 +59,9 @@ pub enum Error {
     /// PDF catalog could not be found.
     #[error("pdf catalog not found")]
     CatalogNotFound,
+    /// PDF oc properties could not be found.
+    #[error("pdf oc properties not found")]
+    OcPropertiesNotFound,
     /// The content stream operator is invalid.
     #[error("invalid operator")]
     InvalidOperator,

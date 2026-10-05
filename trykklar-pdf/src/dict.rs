@@ -48,6 +48,22 @@ pub(crate) fn get_mut<T: Into<ObjectId>>(id: T, doc: &mut Document) -> Result<&m
     Ok(doc.get_dictionary_mut(id.into())?)
 }
 
+// Get a mutable dictionary by the parent id in combination with a dict key, or by the id directly.
+pub(crate) fn get_mut_by_parent_id_or_key<'a>(
+    parent_id: impl Into<ObjectId>,
+    id: Option<impl Into<ObjectId>>,
+    key: &'static [u8],
+    doc: &'a mut Document,
+) -> Result<&'a mut Dictionary> {
+    if let Some(id) = id {
+        get_mut(id, doc)
+    } else {
+        Ok(doc
+            .get_dictionary_mut(parent_id.into())?
+            .get_mut(key)?
+            .as_dict_mut()?)
+    }
+}
 fn read<'a, T: DictKey>(
     doc: &'a Document,
     dict: &'a Dictionary,

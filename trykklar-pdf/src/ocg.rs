@@ -1,15 +1,17 @@
 //! Optional Content Group module containing types on document, page, resource and content stream
 //! level.
 
-use crate::codec::TryFromObject;
-use crate::dict::{DictKey, read_field, read_optional_field};
+use crate::codec::{TryFromObject, TryIntoObject};
+use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::{
     Field, FieldError, FieldExtDeref, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
 };
-use crate::pdf::Pdf;
+use crate::pdf::{CatalogId, Pdf};
 use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object, ObjectId, decode_text_string, text_string};
 use std::collections::HashSet;
+
+object_id!(OCPropertiesId);
 
 /// `/OCProperties` Optional Content Properties
 ///
@@ -22,10 +24,16 @@ use std::collections::HashSet;
 /// Properties Dictionary, Table 100 – Entries in the Optional Content Properties Dictionary
 pub struct OCProperties<'a> {
     doc: &'a Document,
+    id: Option<OCPropertiesId>,
     dict: &'a Dictionary,
 }
 
 impl<'a> OCProperties<'a> {
+    /// Returns the optional ID.
+    pub fn id(&self) -> Option<OCPropertiesId> {
+        self.id
+    }
+
     /// See [`Ocgs`]
     pub fn ocgs(&self) -> Field<Ocgs> {
         read_field::<Ocgs>(self.doc, self.dict)
@@ -42,12 +50,52 @@ impl<'a> DictKey for OCProperties<'a> {
 }
 
 impl<'a> TryFromObject<'a> for OCProperties<'a> {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
-            Object::Dictionary(dict) => Ok(Self { doc, dict }),
+            Object::Dictionary(dict) => Ok(Self {
+                doc,
+                id: id.map(OCPropertiesId),
+                dict,
+            }),
             _ => Err(Error::InvalidPdfObject("OCProperties must be a dictionary")),
         }
     }
+}
+
+/// Mutation object for [`OCProperties`].
+pub struct OCPropertiesMut<'a> {
+    doc: &'a mut Document,
+    catalog_id: CatalogId,
+    id: Option<OCPropertiesId>,
+}
+
+impl<'a> OCPropertiesMut<'a> {
+    /// Initialize the oc properties object as mutable.
+    pub fn try_new(pdf: &'a mut Pdf) -> Result<Self> {
+        let catalog = pdf.catalog()?;
+        let catalog_id = catalog.id();
+        let id = catalog
+            .oc_properties()
+            .ok_or(Error::OcPropertiesNotFound)??
+            .id();
+
+        Ok(Self {
+            doc: pdf.doc_mut(),
+            catalog_id,
+            id,
+        })
+    }
+
+    /// Sets the default config.
+    pub fn set_default_config(&mut self, oc_config: OcConfig) -> Result<()> {
+        dict::write(oc_config, self.doc, |doc: &mut Document| {
+            dict::get_mut_by_parent_id_or_key(self.catalog_id, self.id, Self::KEY, doc)
+        })
+    }
+}
+
+impl DictKey for OCPropertiesMut<'_> {
+    const KEY: &'static [u8] = OCProperties::KEY;
 }
 
 /// `/OCGs` Array of optional content groups
@@ -139,6 +187,12 @@ impl<'a> TryFromObject<'a> for Ocg {
             }
             _ => Err(Error::InvalidPdfObject("OCG must be a dictionary")),
         }
+    }
+}
+
+impl TryIntoObject for Ocg {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(Object::Reference(self.id.into()))
     }
 }
 
@@ -365,6 +419,25 @@ impl<'a> TryFromObject<'a> for OcConfig {
     }
 }
 
+impl TryIntoObject for OcConfig {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        let default_config_id = doc.add_object(Dictionary::new());
+        dict::write(self.base_state?, doc, |doc: &mut Document| {
+            dict::get_mut(default_config_id, doc)
+        })?;
+        dict::write(self.on?, doc, |doc: &mut Document| {
+            dict::get_mut(default_config_id, doc)
+        })?;
+        dict::write(self.off?, doc, |doc: &mut Document| {
+            dict::get_mut(default_config_id, doc)
+        })?;
+        dict::write(self.order?, doc, |doc: &mut Document| {
+            dict::get_mut(default_config_id, doc)
+        })?;
+        Ok(Object::Reference(default_config_id))
+    }
+}
+
 /// `/ON` Array of OCG with state on
 ///
 /// ISO 32000-1:2008 8.11.4.3 Table 101 – Entries in an Optional Content Configuration Dictionary
@@ -403,6 +476,17 @@ impl TryFromObject<'_> for DOn {
             ocg_set.insert(ocg);
         }
         Ok(Self(ocg_set))
+    }
+}
+
+impl TryIntoObject for DOn {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        let ocgs = self
+            .0
+            .into_iter()
+            .map(|ocg| Object::Reference(ocg.id.into()))
+            .collect();
+        Ok(Object::Array(ocgs))
     }
 }
 
@@ -447,6 +531,17 @@ impl TryFromObject<'_> for DOff {
     }
 }
 
+impl TryIntoObject for DOff {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        let ocgs = self
+            .0
+            .into_iter()
+            .map(|ocg| Object::Reference(ocg.id.into()))
+            .collect();
+        Ok(Object::Array(ocgs))
+    }
+}
+
 /// An optionally named group of [`DOrderItem`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OcgGroup {
@@ -463,6 +558,23 @@ impl OcgGroup {
     /// Returns the slice of [`DOrderItem`] in the group.
     pub fn items(&self) -> &[DOrderItem] {
         &self.items
+    }
+}
+
+impl TryIntoObject for OcgGroup {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        let mut arr = Vec::new();
+        if let Some(name) = &self.name {
+            arr.push(text_string(name));
+        }
+        let items = self
+            .items
+            .into_iter()
+            .map(|item| item.try_into_object(doc))
+            .collect::<Result<Vec<_>>>()?;
+        let items_arr = Object::Array(items);
+        arr.push(items_arr);
+        Ok(Object::Array(arr))
     }
 }
 
@@ -485,6 +597,21 @@ impl OcgSubGroup {
     }
 }
 
+impl TryIntoObject for OcgSubGroup {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        let mut arr = Vec::new();
+        arr.push(self.header.try_into_object(doc)?);
+        let body_items = self
+            .body
+            .into_iter()
+            .map(|item| item.try_into_object(doc))
+            .collect::<Result<Vec<_>>>()?;
+        let body_arr = Object::Array(body_items);
+        arr.push(body_arr);
+        Ok(Object::Array(arr))
+    }
+}
+
 /// Find the definition in the parent object [`DOrder`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DOrderItem {
@@ -494,6 +621,16 @@ pub enum DOrderItem {
     OcgGroup(OcgGroup),
     /// Array of an optional content group [`Ocg`] with an Ocg as header.
     OcgSubGroup(OcgSubGroup),
+}
+
+impl TryIntoObject for DOrderItem {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        match self {
+            Self::Ocg(ocg) => ocg.try_into_object(doc),
+            Self::OcgGroup(group) => group.try_into_object(doc),
+            Self::OcgSubGroup(sub_group) => sub_group.try_into_object(doc),
+        }
+    }
 }
 
 /// `/Order` Array of [`DOrderItem`]
@@ -600,6 +737,25 @@ impl<'a> TryFromObject<'a> for DOrder {
     }
 }
 
+impl TryIntoObject for DOrder {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        let mut arr = Vec::new();
+        for item in self.0.into_iter() {
+            match item.try_into_object(doc)? {
+                Object::Reference(reference) => arr.push(Object::Reference(reference)),
+                Object::Array(a) => arr.extend(a),
+                Object::Name(name) => arr.push(Object::Name(name)),
+                _ => {
+                    return Err(Error::InvalidPdfObject(
+                        "D Order items should be a reference, name or array",
+                    ));
+                }
+            }
+        }
+        Ok(Object::Array(arr))
+    }
+}
+
 /// `/BaseState` Initial State of all OCGs
 ///
 /// ISO 32000-1:2008 8.11.4.3 Table 101 – Entries in an Optional Content Configuration Dictionary
@@ -654,6 +810,17 @@ impl<'a> TryFromObject<'a> for BaseState {
             }
         };
         Ok(base_state)
+    }
+}
+
+impl TryIntoObject for BaseState {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        let value = match self {
+            Self::On => "ON",
+            Self::Off => "OFF",
+            Self::Unchanged => "Unchanged",
+        };
+        Ok(Object::Name(value.into()))
     }
 }
 
@@ -1014,6 +1181,23 @@ mod tests {
             DOrder::default(),
         );
         assert_ne!(oc_config_a, oc_configs_b);
+        Ok(())
+    }
+
+    #[test]
+    fn replace_oc_properties_default_config() -> Result<()> {
+        let pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
+        let default_config_before = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
+        let mut pdf = pdf;
+        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        oc_props_mut.set_default_config(default_config_before.clone())?;
+        let default_config_after = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
+        assert_eq!(default_config_before, default_config_after);
+        let oc_config = OcConfig::default();
+        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        oc_props_mut.set_default_config(oc_config.clone())?;
+        let config = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
+        assert_eq!(oc_config, config);
         Ok(())
     }
 }
