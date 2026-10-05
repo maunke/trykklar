@@ -16,7 +16,7 @@ mod walker;
 
 pub extern crate trykklar_pdf as pdf;
 pub use error::{Error, Result};
-pub use image::{Dpi, Image};
+pub use image::{Dpi, PaintedImage};
 pub use pdf::Pdf;
 pub use trykklar::Trykklar;
 pub use walker::{PageWalker, WalkerProcessor};

@@ -1,18 +1,32 @@
 use crate::{Error, Result};
-use pdf::{ContentWalkerStep, ImageXObject, Inch, Length};
+use pdf::page::PdfPageId;
+use pdf::{
+    BBox, ContentWalkerStep, ImageXObject, Inch, Length, PhysicalUnit, Rect, UserSpace, UserUnit,
+};
+use std::sync::Arc;
 
-/// Image Extension
-pub trait Image {
-    /// Returns the dots per inch of the painted image.
-    fn dpi(&self, step: &ContentWalkerStep) -> Result<Dpi>;
+/// An image painted within a content stream.
+#[derive(Debug, Clone)]
+pub struct PaintedImage {
+    page_id: PdfPageId,
+    xobject: Arc<ImageXObject>,
+    bbox: BBox<UserSpace>,
+    user_unit: UserUnit,
+    dpi: Dpi,
 }
 
-impl Image for ImageXObject {
-    fn dpi(&self, step: &ContentWalkerStep) -> Result<Dpi> {
+impl PaintedImage {
+    pub(crate) fn try_from_step(
+        step: &ContentWalkerStep<'_>,
+        xobject: Arc<ImageXObject>,
+    ) -> Result<Self> {
+        let page_id = step.page_id();
         let ctm = step.graphics_state().ctm.as_ref()?;
+        let bbox = step.painted_bbox()?;
+
         let user_unit = step.user_unit()?;
-        let samples_width = self.width()?;
-        let samples_height = self.height()?;
+        let samples_width = xobject.width()?;
+        let samples_height = xobject.height()?;
         let width: Length<Inch> = Length::try_from(ctm.a.hypot(ctm.b))?.to_physical(user_unit);
         let height: Length<Inch> = Length::try_from(ctm.c.hypot(ctm.d))?.to_physical(user_unit);
 
@@ -22,7 +36,34 @@ impl Image for ImageXObject {
         if !x.is_finite() || !y.is_finite() {
             return Err(Error::NonFinite);
         }
-        Ok(Dpi { x, y })
+        let dpi = Dpi { x, y };
+        Ok(Self {
+            page_id,
+            xobject,
+            bbox,
+            user_unit,
+            dpi,
+        })
+    }
+
+    /// Returns the corresponding page id.
+    pub fn page_id(&self) -> PdfPageId {
+        self.page_id
+    }
+
+    /// Returns the bbox.
+    pub fn bbox<U: PhysicalUnit>(&self) -> Option<Rect<U>> {
+        self.bbox.into_rect().map(|r| r.to_physical(self.user_unit))
+    }
+
+    /// Returns the dots per inch of the painted image.
+    pub fn dpi(&self) -> Dpi {
+        self.dpi
+    }
+
+    /// Returns the underlying image xobject.
+    pub fn xobject(&self) -> Arc<ImageXObject> {
+        self.xobject.clone()
     }
 }
 
