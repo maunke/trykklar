@@ -1,6 +1,6 @@
 //! Document Information Dictionary
 
-use crate::codec::{IntoObject, TryFromObject};
+use crate::codec::{TryFromObject, TryIntoObject};
 use crate::datetime::PdfDate;
 use crate::dict::{self, DictKey, read_optional_field};
 use crate::error::OptionalField;
@@ -125,9 +125,9 @@ impl TryFromObject<'_> for Title {
     }
 }
 
-impl IntoObject for Title {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Title {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -165,9 +165,9 @@ impl TryFromObject<'_> for Author {
     }
 }
 
-impl IntoObject for Author {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Author {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -205,9 +205,9 @@ impl TryFromObject<'_> for Subject {
     }
 }
 
-impl IntoObject for Subject {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Subject {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -245,9 +245,9 @@ impl TryFromObject<'_> for Keywords {
     }
 }
 
-impl IntoObject for Keywords {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Keywords {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -286,9 +286,9 @@ impl TryFromObject<'_> for Creator {
     }
 }
 
-impl IntoObject for Creator {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Creator {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -327,9 +327,9 @@ impl TryFromObject<'_> for Producer {
     }
 }
 
-impl IntoObject for Producer {
-    fn into_object(self) -> Object {
-        text_string(self.get())
+impl TryIntoObject for Producer {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(text_string(self.get()))
     }
 }
 
@@ -368,9 +368,9 @@ impl TryFromObject<'_> for CreationDate {
     }
 }
 
-impl IntoObject for CreationDate {
-    fn into_object(self) -> Object {
-        self.0.into_object()
+impl TryIntoObject for CreationDate {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        self.0.try_into_object(doc)
     }
 }
 
@@ -389,7 +389,7 @@ impl ModDate {
         &self.0
     }
 
-    /// Creates a new modified date.
+    /// reates a new modified date.
     pub fn new(value: PdfDate) -> Self {
         Self(value)
     }
@@ -410,9 +410,9 @@ impl TryFromObject<'_> for ModDate {
     }
 }
 
-impl IntoObject for ModDate {
-    fn into_object(self) -> Object {
-        self.0.into_object()
+impl TryIntoObject for ModDate {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        self.0.try_into_object(doc)
     }
 }
 
@@ -426,9 +426,8 @@ impl<'a> InfoMut<'a> {
     /// Creates the mutation object for a given [`InfoId`].
     pub fn try_new(pdf: &'a mut Pdf, id: InfoId) -> Result<Self> {
         let doc = pdf.doc_mut();
-        let mut ocg_mut = Self { doc, id };
-        ocg_mut.dict_mut()?;
-        Ok(ocg_mut)
+        dict::exists(id, doc)?;
+        Ok(Self { doc, id })
     }
 
     /// Creates a new information dictionary.
@@ -452,67 +451,60 @@ impl<'a> InfoMut<'a> {
         }
     }
 
-    fn dict_mut(&mut self) -> Result<&mut Dictionary> {
-        match self.doc.get_object_mut(self.id.get())? {
-            Object::Dictionary(dict) => Ok(dict),
-            _ => Err(Error::InvalidPdfObject("Info must be a dictionary")),
-        }
-    }
-
     /// Sets the title.
     pub fn set_title(&mut self, title: Title) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(title, dict);
-        Ok(())
+        dict::write(title, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the author.
     pub fn set_author(&mut self, author: Author) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(author, dict);
-        Ok(())
+        dict::write(author, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the subject.
     pub fn set_subject(&mut self, subject: Subject) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(subject, dict);
-        Ok(())
+        dict::write(subject, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the keywords.
     pub fn set_keywords(&mut self, keywords: Keywords) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(keywords, dict);
-        Ok(())
+        dict::write(keywords, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the creator.
     pub fn set_creator(&mut self, creator: Creator) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(creator, dict);
-        Ok(())
+        dict::write(creator, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the producer.
     pub fn set_producer(&mut self, producer: Producer) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(producer, dict);
-        Ok(())
+        dict::write(producer, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the creation date.
     pub fn set_creation_date(&mut self, creation_date: CreationDate) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(creation_date, dict);
-        Ok(())
+        dict::write(creation_date, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the mod date.
     pub fn set_mod_date(&mut self, mod_date: ModDate) -> Result<()> {
-        let dict = self.dict_mut()?;
-        dict::write(mod_date, dict);
-        Ok(())
+        dict::write(mod_date, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 }
 

@@ -1,6 +1,6 @@
 //! Dictionary Utilities
 
-use crate::codec::{IntoObject, TryFromObject};
+use crate::codec::{TryFromObject, TryIntoObject};
 use crate::error::{Field, FieldError, OptionalField};
 use crate::{Error, Result};
 use lopdf::{Dictionary, Document, Object, ObjectId};
@@ -30,8 +30,22 @@ pub trait DictKey: Sized {
     const INHERITABLE: bool = false;
 }
 
-pub(crate) fn write<T: DictKey + IntoObject>(entry: T, dict: &mut Dictionary) {
-    dict.set(T::KEY, entry.into_object());
+pub(crate) fn write<T: DictKey + TryIntoObject>(
+    entry: T,
+    doc: &mut Document,
+    dict: impl FnOnce(&mut Document) -> Result<&mut Dictionary>,
+) -> Result<()> {
+    let obj = entry.try_into_object(doc)?;
+    dict(doc)?.set(T::KEY, obj);
+    Ok(())
+}
+
+pub(crate) fn exists<T: Into<ObjectId>>(id: T, doc: &Document) -> Result<()> {
+    Ok(doc.get_dictionary(id.into()).map(|_| ())?)
+}
+
+pub(crate) fn get_mut<T: Into<ObjectId>>(id: T, doc: &mut Document) -> Result<&mut Dictionary> {
+    Ok(doc.get_dictionary_mut(id.into())?)
 }
 
 fn read<'a, T: DictKey>(

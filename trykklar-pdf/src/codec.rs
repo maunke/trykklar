@@ -20,8 +20,8 @@ impl<'a, T: TryFromObject<'a>> TryFromObject<'a> for Vec<T> {
     }
 }
 
-pub(crate) trait IntoObject {
-    fn into_object(self) -> Object;
+pub(crate) trait TryIntoObject {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object>;
 }
 
 pub(crate) trait ObjectAsF64 {

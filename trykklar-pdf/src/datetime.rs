@@ -1,7 +1,7 @@
 //! PDF Datetime
-use crate::codec::{IntoObject, TryFromObject};
+use crate::codec::{TryFromObject, TryIntoObject};
 use crate::{Error, Result};
-use lopdf::{decode_text_string, text_string};
+use lopdf::{Document, Object, decode_text_string, text_string};
 use std::num::NonZero;
 use time::format_description::{BorrowedFormatItem, well_known};
 use time::macros::format_description;
@@ -71,10 +71,10 @@ impl PdfDate {
         }
     }
 
-    fn to_pdf_date_string(&self) -> String {
+    fn try_to_pdf_date_string(&self) -> Result<String> {
         self.0
             .format(PDF_DATE_ENCODE)
-            .expect("constructor checked correct year and offset without seconds")
+            .map_err(|_| Error::DateFormat)
     }
 }
 
@@ -145,10 +145,10 @@ impl TryFromObject<'_> for PdfDate {
     }
 }
 
-impl IntoObject for PdfDate {
-    fn into_object(self) -> lopdf::Object {
-        let date_string = self.to_pdf_date_string();
-        text_string(&date_string)
+impl TryIntoObject for PdfDate {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        let date_string = self.try_to_pdf_date_string()?;
+        Ok(text_string(&date_string))
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
     fn pdf_date_encoding() -> Result<()> {
         let date = datetime!(2026-10-03 13:37:42 +0);
         let pdf_date = PdfDate::try_new(date)?;
-        let pdf_date_string = pdf_date.to_pdf_date_string();
+        let pdf_date_string = pdf_date.try_to_pdf_date_string()?;
         assert_eq!(pdf_date_string, "D:20261003133742+00'00");
         Ok(())
     }

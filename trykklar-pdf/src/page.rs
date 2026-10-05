@@ -1,7 +1,7 @@
 //! PDF Page
 use lopdf::{Dictionary, Document, Object, ObjectId};
 
-use crate::codec::{IntoObject, TryFromObject};
+use crate::codec::{TryFromObject, TryIntoObject};
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
@@ -155,9 +155,9 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let media_box: MediaBox<UserSpace> = rect.into();
-        let page = self.doc.get_dictionary_mut(self.id.get())?;
-        dict::write(media_box, page);
-        Ok(())
+        dict::write(media_box, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the crop box.
@@ -165,9 +165,9 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let crop_box: CropBox<UserSpace> = rect.into();
-        let page = self.doc.get_dictionary_mut(self.id.get())?;
-        dict::write(crop_box, page);
-        Ok(())
+        dict::write(crop_box, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the bleed box.
@@ -175,9 +175,9 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let bleed_box: BleedBox<UserSpace> = rect.into();
-        let page = self.doc.get_dictionary_mut(self.id.get())?;
-        dict::write(bleed_box, page);
-        Ok(())
+        dict::write(bleed_box, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 
     /// Sets the trim box.
@@ -185,9 +185,9 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let trim_box: TrimBox<UserSpace> = rect.into();
-        let page = self.doc.get_dictionary_mut(self.id.get())?;
-        dict::write(trim_box, page);
-        Ok(())
+        dict::write(trim_box, self.doc, |doc: &mut Document| {
+            dict::get_mut(self.id, doc)
+        })
     }
 }
 
@@ -201,9 +201,9 @@ impl TryFromObject<'_> for UserUnit {
     }
 }
 
-impl IntoObject for UserUnit {
-    fn into_object(self) -> Object {
-        Object::Real(self.get() as f32)
+impl TryIntoObject for UserUnit {
+    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+        Ok(Object::Real(self.get() as f32))
     }
 }
 
@@ -336,15 +336,15 @@ macro_rules! page_box {
             }
         }
 
-        impl IntoObject for $name<UserSpace> {
-            fn into_object(self) -> Object {
-                Object::Array(
+        impl TryIntoObject for $name<UserSpace> {
+            fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+                Ok(Object::Array(
                     self.get()
                         .as_box_slice()
                         .iter()
                         .map(|&v| Object::Real(v as f32))
                         .collect(),
-                )
+                ))
             }
         }
     };
@@ -368,10 +368,9 @@ mod tests {
 
     use super::*;
 
-    // 2^-23, one ulp — 2× over the half-ulp floor
-    const F32_ROUNDTRIP_REL: f64 = 1.19e-7;
-
     fn approx_eq(a: f64, b: f64) {
+        // 2^-23 = one ulp 2 times over the half-ulp floor
+        const F32_ROUNDTRIP_REL: f64 = 1.19e-7;
         assert!((a - b).abs() <= F32_ROUNDTRIP_REL * a.abs().max(1.0))
     }
 
@@ -381,13 +380,17 @@ mod tests {
         let content = Content { operations: vec![] };
         let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
 
-        let mut page =
-            dictionary! {"Type" => "Page", "Parent" => pages_id, "Contents" => content_id};
+        let page = dictionary! {"Type" => "Page", "Parent" => pages_id, "Contents" => content_id};
+        let page_id = doc.add_object(page);
         // Set the UserUnit entry on the page dictionary.
         if let Some(value) = user_unit {
-            dict::write(UserUnit::try_from(value).expect("correct"), &mut page);
+            dict::write(
+                UserUnit::try_from(value).expect("correct"),
+                &mut doc,
+                |doc: &mut Document| dict::get_mut(page_id, doc),
+            )
+            .expect("test pdf should be created");
         }
-        let page_id = doc.add_object(page);
 
         let pages = dictionary! {
             "Type" => "Pages",
@@ -493,7 +496,6 @@ mod tests {
         let doc = pdf.doc_mut();
         let catalog = doc.catalog_mut()?;
         let pages_dict_id = catalog.get(b"Pages")?.as_reference()?;
-        let pages_dict = doc.get_dictionary_mut(pages_dict_id)?;
 
         let size = Size::<Mm> {
             width: 155.0.try_into()?,
@@ -505,7 +507,9 @@ mod tests {
         };
         let media_box: MediaBox<UserSpace> = Rect { size, origin }.to_user(uu).into();
 
-        dict::write(media_box, pages_dict);
+        dict::write(media_box, doc, |doc: &mut Document| {
+            dict::get_mut(pages_dict_id, doc)
+        })?;
 
         let page = pdf.page(0)?;
         let page_media_box: MediaBox<Mm> = page.media_box()?;

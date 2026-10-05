@@ -18,6 +18,12 @@ macro_rules! object_id {
                 self.0
             }
         }
+
+        impl From<$name> for lopdf::ObjectId {
+            fn from(value: $name) -> lopdf::ObjectId {
+                value.get()
+            }
+        }
     };
 }
 
