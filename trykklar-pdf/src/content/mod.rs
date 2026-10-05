@@ -7,7 +7,7 @@ use crate::error::ResultExt;
 use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
 use crate::ocg::Oc;
-use crate::page::PdfPage;
+use crate::page::{PdfPage, PdfPageId};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;
 use crate::xobject::{FormXObject, XObject};
@@ -41,6 +41,7 @@ use std::sync::Arc;
 /// - Current Point
 #[derive(Debug, Clone)]
 pub struct ContentWalker<'a> {
+    page_id: PdfPageId,
     doc: &'a Document,
     context: Option<Arc<WalkerContext>>,
     cache: WalkerCache<'a>,
@@ -93,6 +94,7 @@ impl<'a> ContentWalker<'a> {
 /// The step representates an operator the related state.
 #[derive(Debug, Clone)]
 pub struct ContentWalkerStep<'a> {
+    page_id: PdfPageId,
     raw_operation: Arc<Operation>,
     context: Option<Arc<WalkerContext>>,
     operator: Operator<'a>,
@@ -108,6 +110,11 @@ pub struct ContentWalkerStep<'a> {
 }
 
 impl<'a> ContentWalkerStep<'a> {
+    /// Returns the corresponding page id.
+    pub fn page_id(&self) -> PdfPageId {
+        self.page_id
+    }
+
     /// Returns the raw operation, containing the operator and operands.
     pub fn raw_operation(&self) -> &Arc<Operation> {
         &self.raw_operation
@@ -312,6 +319,7 @@ impl<'a> ContentWalker<'a> {
         let line_matrix = Ok(Matrix::IDENTITY);
         let depth = 0;
         Ok(Self {
+            page_id: id,
             doc,
             context: None,
             cache: Default::default(),
@@ -387,6 +395,7 @@ impl<'a> ContentWalker<'a> {
             return Err(Error::ContentWalkerDepthExceeded);
         }
         Ok(Self {
+            page_id: self.page_id,
             doc: self.doc,
             context: self.context.clone(),
             cache: Default::default(),
@@ -456,6 +465,7 @@ impl<'a> ContentWalker<'a> {
             return Err(Error::ContentWalkerDepthExceeded);
         }
         Ok(Self {
+            page_id: self.page_id,
             doc: self.doc,
             context: self.context.clone(),
             cache: Default::default(),
@@ -800,6 +810,7 @@ impl<'a> ContentWalker<'a> {
             .collect();
 
         let walker_step = ContentWalkerStep {
+            page_id: self.page_id,
             raw_operation: raw_operation.clone(),
             context: self.context.clone(),
             operator,
