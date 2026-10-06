@@ -561,22 +561,15 @@ impl OcgGroup {
     pub fn items(&self) -> &[DOrderItem] {
         &self.items
     }
-}
 
-impl TryIntoObject for OcgGroup {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+    fn into_array_of_objects(self, doc: &mut Document) -> Result<Vec<Object>> {
         let mut arr = Vec::new();
         if let Some(name) = &self.name {
             arr.push(text_string(name));
         }
-        let items = self
-            .items
-            .into_iter()
-            .map(|item| item.try_into_object(doc))
-            .collect::<Result<Vec<_>>>()?;
-        let items_arr = Object::Array(items);
-        arr.push(items_arr);
-        Ok(Object::Array(arr))
+        let items_arr = d_order_items_to_object(self.items, doc)?;
+        arr.extend(items_arr);
+        Ok(arr)
     }
 }
 
@@ -597,20 +590,13 @@ impl OcgSubGroup {
     pub fn body(&self) -> &[DOrderItem] {
         &self.body
     }
-}
 
-impl TryIntoObject for OcgSubGroup {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+    fn into_array_of_objects(self, doc: &mut Document) -> Result<Vec<Object>> {
         let mut arr = Vec::new();
         arr.push(self.header.try_into_object(doc)?);
-        let body_items = self
-            .body
-            .into_iter()
-            .map(|item| item.try_into_object(doc))
-            .collect::<Result<Vec<_>>>()?;
-        let body_arr = Object::Array(body_items);
-        arr.push(body_arr);
-        Ok(Object::Array(arr))
+        let body_items_arr = d_order_items_to_object(self.body, doc)?;
+        arr.push(Object::Array(body_items_arr));
+        Ok(arr)
     }
 }
 
@@ -625,13 +611,21 @@ pub enum DOrderItem {
     OcgSubGroup(OcgSubGroup),
 }
 
-impl TryIntoObject for DOrderItem {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        match self {
-            Self::Ocg(ocg) => ocg.try_into_object(doc),
-            Self::OcgGroup(group) => group.try_into_object(doc),
-            Self::OcgSubGroup(sub_group) => sub_group.try_into_object(doc),
-        }
+impl From<Ocg> for DOrderItem {
+    fn from(value: Ocg) -> Self {
+        Self::Ocg(value)
+    }
+}
+
+impl From<OcgGroup> for DOrderItem {
+    fn from(value: OcgGroup) -> Self {
+        Self::OcgGroup(value)
+    }
+}
+
+impl From<OcgSubGroup> for DOrderItem {
+    fn from(value: OcgSubGroup) -> Self {
+        Self::OcgSubGroup(value)
     }
 }
 
@@ -683,52 +677,102 @@ impl DictKey for DOrder {
 fn d_order_from_array<'a>(
     doc: &'a Document,
     objects: &'a [Object],
-    flatten: bool,
     depth: usize,
+    in_group: bool,
 ) -> Result<Vec<DOrderItem>> {
     if depth > D_ORDER_DEPTH_LIMIT {
         return Err(Error::OcPropertiesNotFound);
     }
-    let mut group = OcgGroup {
-        name: None,
-        items: vec![],
-    };
-    let mut items: Vec<DOrderItem> = vec![];
-    for (idx, obj) in objects.iter().enumerate() {
-        if idx == 0
-            && let Ok(text) = decode_text_string(obj)
-        {
-            group.name = Some(text);
+
+    let mut items = Vec::new();
+
+    let mut buffer_ocg: Option<Ocg> = None;
+    let mut buffer_group: Option<OcgGroup> = None;
+    let mut buffer_title: Option<String> = None;
+
+    let mut obj_iter = objects.iter();
+    let mut idx = 0;
+    while let Some(obj) = obj_iter.next()
+        && let (id, obj) = doc.dereference(obj)?
+    {
+        if let Ok(title) = decode_text_string(obj) {
+            if idx > 0 {
+                return Err(Error::InvalidPdfObject(
+                    "only the first entry can be a name entry",
+                ));
+            }
+            buffer_title = Some(title);
         } else {
-            let obj = doc.dereference(obj)?;
-            match obj {
-                (_, Object::Array(arr)) => {
-                    let flatten = matches!(group.items.last(), Some(DOrderItem::Ocg(..)));
-                    let order_items = d_order_from_array(doc, arr, flatten, depth + 1)?;
-                    if let Some(DOrderItem::Ocg(ocg)) = group.items.last() {
-                        let sub_group = DOrderItem::OcgSubGroup(OcgSubGroup {
-                            header: ocg.clone(),
-                            body: order_items.clone(),
-                        });
-                        group.items.pop();
-                        group.items.push(sub_group.clone());
-                    } else {
-                        group.items.extend(order_items);
-                    }
+            match (
+                id,
+                obj,
+                buffer_title.take(),
+                buffer_group.take(),
+                buffer_ocg.take(),
+            ) {
+                (_, Object::Array(arr), None, None, Some(ocg)) => {
+                    let arr_items = d_order_from_array(doc, arr, depth + 1, true)?;
+                    items.push(
+                        OcgSubGroup {
+                            header: ocg,
+                            body: arr_items,
+                        }
+                        .into(),
+                    );
                 }
-                (id, v) => {
-                    let ocg = Ocg::try_from_object(doc, id, v)?;
-                    group.items.push(DOrderItem::Ocg(ocg));
+                (_, Object::Array(arr), None, None, None) => {
+                    let arr_items = d_order_from_array(doc, arr, depth + 1, false)?;
+                    items.extend(arr_items);
                 }
+                (id, val, None, None, Some(ocg)) if in_group => {
+                    items.push(ocg.into());
+                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    buffer_ocg = Some(ocg);
+                }
+                (id, val, None, None, Some(ocg)) if !in_group && idx == 1 => {
+                    buffer_group = Some(OcgGroup {
+                        name: None,
+                        items: vec![ocg.into()],
+                    });
+                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    buffer_ocg = Some(ocg);
+                }
+                (id, val, None, None, None) => {
+                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    buffer_ocg = Some(ocg);
+                }
+                (id, val, None, Some(mut group), None) => {
+                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    group.items.push(ocg.into());
+                    buffer_group = Some(group);
+                }
+                (id, val, Some(title), None, None) => {
+                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    buffer_group = Some(OcgGroup {
+                        name: Some(title),
+                        items: vec![ocg.into()],
+                    });
+                }
+                _ => return Err(Error::InvalidPdfObject("d order could not be parsed")),
+            }
+        }
+        idx += 1;
+    }
+    if let Some(ocg) = buffer_ocg.take() {
+        match items.len() {
+            0 if !in_group => {
+                buffer_group = Some(OcgGroup {
+                    name: None,
+                    items: vec![ocg.into()],
+                });
+            }
+            _ => {
+                items.push(ocg.into());
             }
         }
     }
-    if !group.items().is_empty() {
-        if flatten {
-            items.extend(group.items);
-        } else {
-            items.push(DOrderItem::OcgGroup(group.clone()));
-        }
+    if let Some(group) = buffer_group.take() {
+        items.push(group.into());
     }
 
     Ok(items)
@@ -737,28 +781,29 @@ fn d_order_from_array<'a>(
 impl<'a> TryFromObject<'a> for DOrder {
     fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
-            Object::Array(array) => Ok(Self(d_order_from_array(doc, array, true, 0)?)),
+            Object::Array(array) => Ok(Self(d_order_from_array(doc, array, 0, false)?)),
             _ => Err(Error::InvalidPdfObject("DOrder must be an array")),
         }
     }
 }
 
-impl TryIntoObject for DOrder {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        let mut arr = Vec::new();
-        for item in self.0.into_iter() {
-            match item.try_into_object(doc)? {
-                Object::Reference(reference) => arr.push(Object::Reference(reference)),
-                Object::Array(a) => arr.extend(a),
-                Object::Name(name) => arr.push(Object::Name(name)),
-                _ => {
-                    return Err(Error::InvalidPdfObject(
-                        "D Order items should be a reference, name or array",
-                    ));
-                }
+fn d_order_items_to_object(items: Vec<DOrderItem>, doc: &mut Document) -> Result<Vec<Object>> {
+    let mut arr = Vec::new();
+    for item in items.into_iter() {
+        match item {
+            DOrderItem::Ocg(ocg) => arr.push(ocg.try_into_object(doc)?),
+            DOrderItem::OcgSubGroup(sub_group) => arr.extend(sub_group.into_array_of_objects(doc)?),
+            DOrderItem::OcgGroup(group) => {
+                arr.push(Object::Array(group.into_array_of_objects(doc)?))
             }
         }
-        Ok(Object::Array(arr))
+    }
+    Ok(arr)
+}
+
+impl TryIntoObject for DOrder {
+    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
+        Ok(Object::Array(d_order_items_to_object(self.0, doc)?))
     }
 }
 
@@ -1204,6 +1249,51 @@ mod tests {
         oc_props_mut.set_default_config(oc_config.clone())?;
         let config = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
         assert_eq!(oc_config, config);
+        Ok(())
+    }
+
+    #[test]
+    fn default_config_encode_decode() -> Result<()> {
+        let mut pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
+        let ocgs = pdf
+            .catalog()?
+            .oc_properties()
+            .expect("exists")?
+            .ocgs()?
+            .get()
+            .to_owned();
+        let order = DOrder(vec![
+            OcgGroup {
+                name: Some("Group title".to_string()),
+                items: vec![ocgs[1].clone().into()],
+            }
+            .into(),
+            OcgGroup {
+                name: Some("Group title".to_string()),
+                items: vec![ocgs[1].clone().into()],
+            }
+            .into(),
+            ocgs[1].clone().into(),
+            OcgGroup {
+                name: Some("Group title".to_string()),
+                items: vec![ocgs[1].clone().into()],
+            }
+            .into(),
+            OcgGroup {
+                name: None,
+                items: vec![ocgs[1].clone().into(), ocgs[1].clone().into()],
+            }
+            .into(),
+        ]);
+        let oc_config = OcConfig::new(BaseState::default(), DOn::default(), DOff::default(), order);
+        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        oc_props_mut.set_default_config(oc_config.clone())?;
+        let pdf_oc_config = pdf
+            .catalog()?
+            .oc_properties()
+            .expect("exists")?
+            .default_config()?;
+        assert_ne!(pdf_oc_config.order()?, oc_config.order()?);
         Ok(())
     }
 }
