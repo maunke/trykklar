@@ -92,6 +92,9 @@ pub enum Error {
     /// Content walker depth limit exceeded.
     #[error("max content walker depth reached")]
     ContentWalkerDepthExceeded,
+    /// Oc config order depth limit exceeded.
+    #[error("oc config order depth reached")]
+    OcConfigOrderDepthExceeded,
     /// Invalid optional content stack.
     #[error("invalid oc stack")]
     InvalidOcStack,

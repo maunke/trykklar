@@ -11,6 +11,8 @@ use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object, ObjectId, decode_text_string, text_string};
 use std::collections::HashSet;
 
+const D_ORDER_DEPTH_LIMIT: usize = 128;
+
 object_id!(OCPropertiesId);
 
 /// `/OCProperties` Optional Content Properties
@@ -681,8 +683,12 @@ impl DictKey for DOrder {
 fn d_order_from_array<'a>(
     doc: &'a Document,
     objects: &'a [Object],
-    top_level: bool,
+    flatten: bool,
+    depth: usize,
 ) -> Result<Vec<DOrderItem>> {
+    if depth > D_ORDER_DEPTH_LIMIT {
+        return Err(Error::OcPropertiesNotFound);
+    }
     let mut group = OcgGroup {
         name: None,
         items: vec![],
@@ -697,8 +703,8 @@ fn d_order_from_array<'a>(
             let obj = doc.dereference(obj)?;
             match obj {
                 (_, Object::Array(arr)) => {
-                    let top_level = matches!(group.items.last(), Some(DOrderItem::Ocg(..)));
-                    let order_items = d_order_from_array(doc, arr, top_level)?;
+                    let flatten = matches!(group.items.last(), Some(DOrderItem::Ocg(..)));
+                    let order_items = d_order_from_array(doc, arr, flatten, depth + 1)?;
                     if let Some(DOrderItem::Ocg(ocg)) = group.items.last() {
                         let sub_group = DOrderItem::OcgSubGroup(OcgSubGroup {
                             header: ocg.clone(),
@@ -718,7 +724,7 @@ fn d_order_from_array<'a>(
         }
     }
     if !group.items().is_empty() {
-        if top_level {
+        if flatten {
             items.extend(group.items);
         } else {
             items.push(DOrderItem::OcgGroup(group.clone()));
@@ -731,7 +737,7 @@ fn d_order_from_array<'a>(
 impl<'a> TryFromObject<'a> for DOrder {
     fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
-            Object::Array(array) => Ok(Self(d_order_from_array(doc, array, true)?)),
+            Object::Array(array) => Ok(Self(d_order_from_array(doc, array, true, 0)?)),
             _ => Err(Error::InvalidPdfObject("DOrder must be an array")),
         }
     }
