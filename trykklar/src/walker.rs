@@ -56,7 +56,8 @@ impl<'a> PageWalker<'a> {
     pub fn run(&mut self, page: &pdf::PdfPage<'_>) -> Result<()> {
         let mut walker = ContentWalker::from_page(page)?;
         if let Some(config) = &self.oc_config {
-            walker = walker.with_context(WalkerContext::new(Some(config.clone())));
+            walker =
+                walker.with_context(WalkerContext::new().with_oc_default_config(config.clone()));
         }
         self.walk(&mut walker)
     }
