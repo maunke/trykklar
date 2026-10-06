@@ -1,7 +1,8 @@
 use crate::Result;
+use pdf::error::ResultExt;
 use pdf::{
-    BBox, Color, ContentWalker, ContentWalkerStep, OcConfig, Operator, PatternColor, UserSpace,
-    WalkerContext, XObject,
+    BBox, Color, ContentWalker, ContentWalkerStep, ImageKind, OcConfig, Operator, PatternColor,
+    UserSpace, WalkerContext, XObject,
 };
 
 /// Walker Processor
@@ -78,6 +79,16 @@ impl<'a> PageWalker<'a> {
                             self.walk(&mut form_walker)?;
                         }
                         Err(e) => return Err(e.clone().into()),
+                        Ok(XObject::Image(image))
+                            if matches!(image.kind(), Ok(ImageKind::Mask)) =>
+                        {
+                            let region = step.painted_bbox();
+                            self.walk_tiling(
+                                walker,
+                                step.graphics_state().non_stroking.color.ok_ref()?,
+                                region.clone(),
+                            )?;
+                        }
                         _ => (),
                     };
                 }
@@ -86,14 +97,32 @@ impl<'a> PageWalker<'a> {
                     if *fill {
                         self.walk_tiling(
                             walker,
-                            &step.graphics_state().non_stroking.color.clone()?,
+                            step.graphics_state().non_stroking.color.ok_ref()?,
                             region.clone(),
                         )?;
                     }
                     if *stroke {
                         self.walk_tiling(
                             walker,
-                            &step.graphics_state().stroking.color.clone()?,
+                            step.graphics_state().stroking.color.ok_ref()?,
+                            region.clone(),
+                        )?;
+                    }
+                }
+                Operator::ShowText(_) => {
+                    let region = step.painted_bbox();
+                    let text_mode = step.graphics_state().text.mode.ok_ref()?;
+                    if text_mode.fills() {
+                        self.walk_tiling(
+                            walker,
+                            step.graphics_state().non_stroking.color.ok_ref()?,
+                            region.clone(),
+                        )?;
+                    }
+                    if text_mode.strokes() {
+                        self.walk_tiling(
+                            walker,
+                            step.graphics_state().stroking.color.ok_ref()?,
                             region.clone(),
                         )?;
                     }
