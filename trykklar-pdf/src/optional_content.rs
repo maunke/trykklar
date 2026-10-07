@@ -71,9 +71,9 @@ pub struct OCPropertiesMut<'a> {
     id: Option<OCPropertiesId>,
 }
 
-impl<'a> OCPropertiesMut<'a> {
-    /// Initialize the oc properties object as mutable.
-    pub fn try_new(pdf: &'a mut Pdf) -> Result<Self> {
+impl<'a> TryFrom<&'a mut Pdf> for OCPropertiesMut<'a> {
+    type Error = Error;
+    fn try_from(pdf: &'a mut Pdf) -> Result<Self> {
         let catalog = pdf.catalog()?;
         let catalog_id = catalog.id();
         let id = catalog
@@ -87,7 +87,9 @@ impl<'a> OCPropertiesMut<'a> {
             id,
         })
     }
+}
 
+impl<'a> OCPropertiesMut<'a> {
     /// Sets the default config.
     pub fn set_default_config(&mut self, oc_config: OcConfig) -> Result<()> {
         dict::write(oc_config, self.pdf, |pdf: &mut Pdf| {
@@ -1241,12 +1243,12 @@ mod tests {
         let pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
         let default_config_before = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
         let mut pdf = pdf;
-        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        let mut oc_props_mut = OCPropertiesMut::try_from(&mut pdf)?;
         oc_props_mut.set_default_config(default_config_before.clone())?;
         let default_config_after = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
         assert_eq!(default_config_before, default_config_after);
         let oc_config = OcConfig::default();
-        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        let mut oc_props_mut = OCPropertiesMut::try_from(&mut pdf)?;
         oc_props_mut.set_default_config(oc_config.clone())?;
         let config = pdf.catalog()?.oc_properties().unwrap()?.default_config()?;
         assert_eq!(oc_config, config);
@@ -1287,7 +1289,7 @@ mod tests {
             .into(),
         ]);
         let oc_config = OcConfig::new(BaseState::default(), DOn::default(), DOff::default(), order);
-        let mut oc_props_mut = OCPropertiesMut::try_new(&mut pdf)?;
+        let mut oc_props_mut = OCPropertiesMut::try_from(&mut pdf)?;
         oc_props_mut.set_default_config(oc_config.clone())?;
         let pdf_oc_config = pdf
             .catalog()?
