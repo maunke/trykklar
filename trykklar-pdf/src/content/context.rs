@@ -1,4 +1,4 @@
-use crate::ocg::OcConfig;
+use crate::optional_content::OcConfig;
 
 /// Content Walker Context
 ///

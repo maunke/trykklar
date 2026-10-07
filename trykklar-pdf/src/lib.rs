@@ -19,7 +19,7 @@ pub mod geometry;
 pub mod id;
 pub mod info;
 pub mod matrix;
-pub mod ocg;
+pub mod optional_content;
 pub mod page;
 pub mod pattern;
 pub mod pdf;
@@ -37,7 +37,7 @@ pub use extgstate::{BlendMode, SoftMask};
 pub use geometry::{BBox, Rect};
 pub(crate) use id::object_id;
 pub use matrix::Matrix;
-pub use ocg::{
+pub use optional_content::{
     BaseState, DOff, DOn, DOrder, DOrderItem, InlineOcg, OCProperties, Oc, OcConfig, Ocg, OcgGroup,
     OcgId, OcgSubGroup, Ocgs,
 };

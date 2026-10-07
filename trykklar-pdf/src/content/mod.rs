@@ -6,7 +6,7 @@ mod state;
 use crate::error::ResultExt;
 use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
-use crate::ocg::Oc;
+use crate::optional_content::Oc;
 use crate::page::{PdfPage, PdfPageId};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;

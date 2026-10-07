@@ -2,7 +2,7 @@
 use crate::datetime::PdfDate;
 use crate::dict::read_optional_field;
 use crate::info::{Info, InfoMut, ModDate};
-use crate::ocg::OCProperties;
+use crate::optional_content::OCProperties;
 use crate::page::{PdfPage, PdfPageId, PdfPageMut};
 use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object};

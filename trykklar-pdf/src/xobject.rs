@@ -7,7 +7,7 @@ use crate::error::{
     ResultExtDeref,
 };
 use crate::geometry::Rect;
-use crate::ocg::Oc;
+use crate::optional_content::Oc;
 use crate::resources::Resources;
 use crate::stream::{FilterName, StreamFilter};
 use crate::unit::UserSpace;

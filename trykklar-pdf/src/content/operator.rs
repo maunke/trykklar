@@ -9,7 +9,7 @@ use crate::font::Font;
 use crate::geometry::{
     CurveTo, CurveToControlCurrentTwo, CurveToControlOneThree, LineTo, MoveTo, PathElement,
 };
-use crate::ocg::Oc;
+use crate::optional_content::Oc;
 use crate::pattern::{Pattern, Shading, TilingPaintType};
 use crate::text::{
     CharSpace, HorizontalScale, MoveText, MoveTextSetLeading, ShowText, TextFontSize, TextLeading,
