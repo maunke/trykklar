@@ -1,27 +1,31 @@
 //! PDF Page
-use lopdf::{Dictionary, Document, Object, ObjectId};
+use lopdf::{Dictionary, Object, ObjectId};
 
 use crate::codec::{TryFromObject, TryIntoObject};
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
 use crate::unit::{UserSpace, UserUnit};
-use crate::{Error, ObjectAsF64, PhysicalUnit, Result, object_id};
+use crate::{Error, ObjectAsF64, Pdf, PhysicalUnit, Result, object_id};
 
 object_id!(PdfPageId);
 
 /// PDF Page
 #[derive(Debug, Clone)]
 pub struct PdfPage<'a> {
-    doc: &'a Document,
+    pdf: &'a Pdf,
     id: PdfPageId,
     dict: &'a Dictionary,
 }
 
 impl<'a> PdfPage<'a> {
-    pub(crate) fn new(doc: &'a Document, id: PdfPageId) -> Result<Self> {
-        let dict = doc.get_dictionary(id.get())?;
-        Ok(Self { doc, id, dict })
+    pub(crate) fn new(pdf: &'a Pdf, id: PdfPageId) -> Result<Self> {
+        let dict = pdf.doc().get_dictionary(id.get())?;
+        Ok(Self { pdf, id, dict })
+    }
+
+    pub(crate) fn pdf(&self) -> &Pdf {
+        self.pdf
     }
 
     /// Returns the page object id.
@@ -29,13 +33,9 @@ impl<'a> PdfPage<'a> {
         self.id
     }
 
-    pub(crate) fn doc(&self) -> &'a Document {
-        self.doc
-    }
-
     /// Returns the user unit.
     pub fn user_unit(&self) -> Result<UserUnit> {
-        match read_optional_field::<UserUnit>(self.doc, self.dict) {
+        match read_optional_field::<UserUnit>(self.pdf, self.dict) {
             Some(value) => value,
             _ => Ok(UserUnit::default()),
         }
@@ -43,19 +43,19 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the page rotation.
     pub fn rotation(&self) -> Result<PageRotate> {
-        match read_optional_field(self.doc, self.dict) {
+        match read_optional_field(self.pdf, self.dict) {
             Some(value) => value,
             None => Ok(Default::default()),
         }
     }
 
     pub(crate) fn media_box_user(&self) -> Result<MediaBox<UserSpace>> {
-        read_field::<MediaBox<UserSpace>>(self.doc, self.dict).as_result()
+        read_field::<MediaBox<UserSpace>>(self.pdf, self.dict).as_result()
     }
 
     /// Returns the media box.
     pub fn media_box<U: PhysicalUnit>(&self) -> Result<MediaBox<U>> {
-        let media_box = read_field::<MediaBox<UserSpace>>(self.doc, self.dict)?;
+        let media_box = read_field::<MediaBox<UserSpace>>(self.pdf, self.dict)?;
         let rect = media_box.get();
         let uu = self.user_unit()?;
         Ok(MediaBox(rect.to_physical(uu)))
@@ -63,7 +63,7 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the crop box.
     pub fn crop_box<U: PhysicalUnit>(&self) -> Result<CropBox<U>> {
-        match read_optional_field::<CropBox<UserSpace>>(self.doc, self.dict) {
+        match read_optional_field::<CropBox<UserSpace>>(self.pdf, self.dict) {
             Some(value) => {
                 let crop_box = value?;
                 let rect = crop_box.get();
@@ -81,7 +81,7 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the bleed box.
     pub fn bleed_box<U: PhysicalUnit>(&self) -> Result<BleedBox<U>> {
-        match read_optional_field::<BleedBox<UserSpace>>(self.doc, self.dict) {
+        match read_optional_field::<BleedBox<UserSpace>>(self.pdf, self.dict) {
             Some(value) => {
                 let bleed_box = value?;
                 let rect = bleed_box.get();
@@ -99,7 +99,7 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the trim box.
     pub fn trim_box<U: PhysicalUnit>(&self) -> Result<TrimBox<U>> {
-        match read_optional_field::<TrimBox<UserSpace>>(self.doc, self.dict) {
+        match read_optional_field::<TrimBox<UserSpace>>(self.pdf, self.dict) {
             Some(value) => {
                 let trim_box = value?;
                 let rect = trim_box.get();
@@ -117,7 +117,7 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the art box.
     pub fn art_box<U: PhysicalUnit>(&self) -> Result<ArtBox<U>> {
-        match read_optional_field::<ArtBox<UserSpace>>(self.doc, self.dict) {
+        match read_optional_field::<ArtBox<UserSpace>>(self.pdf, self.dict) {
             Some(value) => {
                 let art_box = value?;
                 let rect = art_box.get();
@@ -136,18 +136,18 @@ impl<'a> PdfPage<'a> {
 
 /// Mutable page object.
 pub struct PdfPageMut<'a> {
-    doc: &'a mut Document,
+    pdf: &'a mut Pdf,
     id: PdfPageId,
 }
 
 impl<'a> PdfPageMut<'a> {
-    pub(crate) fn new(doc: &'a mut Document, id: PdfPageId) -> Self {
-        Self { doc, id }
+    pub(crate) fn new(pdf: &'a mut Pdf, id: PdfPageId) -> Self {
+        Self { pdf, id }
     }
 
     /// Reborrow as a shared view so read methods aren't duplicated.
     fn as_page(&self) -> Result<PdfPage<'_>> {
-        PdfPage::new(self.doc, self.id)
+        PdfPage::new(self.pdf, self.id)
     }
 
     /// Sets the media box.
@@ -155,8 +155,8 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let media_box: MediaBox<UserSpace> = rect.into();
-        dict::write(media_box, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(media_box, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
@@ -165,8 +165,8 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let crop_box: CropBox<UserSpace> = rect.into();
-        dict::write(crop_box, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(crop_box, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
@@ -175,8 +175,8 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let bleed_box: BleedBox<UserSpace> = rect.into();
-        dict::write(bleed_box, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(bleed_box, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
@@ -185,8 +185,8 @@ impl<'a> PdfPageMut<'a> {
         let uu = self.as_page()?.user_unit()?;
         let rect: Rect<UserSpace> = value.get().to_user(uu);
         let trim_box: TrimBox<UserSpace> = rect.into();
-        dict::write(trim_box, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(trim_box, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 }
@@ -196,13 +196,13 @@ impl DictKey for UserUnit {
 }
 
 impl TryFromObject<'_> for UserUnit {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Self::try_from(obj.as_float()? as f64)
     }
 }
 
 impl TryIntoObject for UserUnit {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(Object::Real(self.get() as f32))
     }
 }
@@ -250,7 +250,7 @@ impl DictKey for PageRotate {
 }
 
 impl TryFromObject<'_> for PageRotate {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let degrees_f64 = obj.as_f64()?;
         Self::try_from(degrees_f64)
     }
@@ -308,11 +308,7 @@ macro_rules! page_box {
         }
 
         impl TryFromObject<'_> for $name<UserSpace> {
-            fn try_from_object(
-                _doc: &Document,
-                _id: Option<ObjectId>,
-                obj: &Object,
-            ) -> Result<Self> {
+            fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
                 match obj {
                     Object::Array(array) => {
                         // Check for 4 entries
@@ -337,7 +333,7 @@ macro_rules! page_box {
         }
 
         impl TryIntoObject for $name<UserSpace> {
-            fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+            fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
                 Ok(Object::Array(
                     self.get()
                         .as_box_slice()
@@ -360,7 +356,7 @@ page_box!(ArtBox, b"ArtBox", inheritable: false);
 mod tests {
 
     use lopdf::content::Content;
-    use lopdf::{Stream, dictionary};
+    use lopdf::{Document, Stream, dictionary};
 
     use crate::geometry::{Point, Size};
     use crate::pdf::Pdf;
@@ -375,19 +371,22 @@ mod tests {
     }
 
     fn get_pdf(user_unit: Option<f64>) -> Pdf {
-        let mut doc = Document::with_version("1.5");
-        let pages_id = doc.new_object_id();
+        let doc = Document::with_version("1.5");
+        let mut pdf = Pdf::from_doc(doc);
+        let pages_id = pdf.doc_mut().new_object_id();
         let content = Content { operations: vec![] };
-        let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+        let content_id = pdf
+            .doc_mut()
+            .add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
 
         let page = dictionary! {"Type" => "Page", "Parent" => pages_id, "Contents" => content_id};
-        let page_id = doc.add_object(page);
+        let page_id = pdf.doc_mut().add_object(page);
         // Set the UserUnit entry on the page dictionary.
         if let Some(value) = user_unit {
             dict::write(
                 UserUnit::try_from(value).expect("correct"),
-                &mut doc,
-                |doc: &mut Document| dict::get_mut(page_id, doc),
+                &mut pdf,
+                |pdf: &mut Pdf| dict::get_mut(page_id, pdf),
             )
             .expect("test pdf should be created");
         }
@@ -399,14 +398,16 @@ mod tests {
             "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
         };
 
-        doc.objects.insert(pages_id, Object::Dictionary(pages));
-        let catalog_id = doc.add_object(dictionary! {
+        pdf.doc_mut()
+            .objects
+            .insert(pages_id, Object::Dictionary(pages));
+        let catalog_id = pdf.doc_mut().add_object(dictionary! {
             "Type" => "Catalog",
             "Pages" => pages_id,
         });
 
-        doc.trailer.set("Root", catalog_id);
-        Pdf::from_doc(doc)
+        pdf.doc_mut().trailer.set("Root", catalog_id);
+        pdf
     }
 
     #[test]
@@ -507,8 +508,8 @@ mod tests {
         };
         let media_box: MediaBox<UserSpace> = Rect { size, origin }.to_user(uu).into();
 
-        dict::write(media_box, doc, |doc: &mut Document| {
-            dict::get_mut(pages_dict_id, doc)
+        dict::write(media_box, &mut pdf, |pdf: &mut Pdf| {
+            dict::get_mut(pages_dict_id, pdf)
         })?;
 
         let page = pdf.page(0)?;

@@ -1,8 +1,8 @@
 //! Text
 use crate::codec::TryFromObject;
 use crate::content::TryFromOperands;
-use crate::{Error, ObjectAsF64, Result};
-use lopdf::{Document, Object, ObjectId};
+use crate::{Error, ObjectAsF64, Pdf, Result};
+use lopdf::{Object, ObjectId};
 
 /// Text rendering mode
 ///
@@ -287,7 +287,7 @@ impl ShowText {
 pub struct TextFontSize(f64);
 
 impl TryFromObject<'_> for TextFontSize {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -327,7 +327,7 @@ impl CharSpace {
 }
 
 impl TryFromObject<'_> for CharSpace {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -361,7 +361,7 @@ impl WordSpace {
 }
 
 impl TryFromObject<'_> for WordSpace {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -391,7 +391,7 @@ impl HorizontalScale {
 }
 
 impl TryFromObject<'_> for HorizontalScale {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -425,7 +425,7 @@ impl TextLeading {
 }
 
 impl TryFromObject<'_> for TextLeading {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -454,7 +454,7 @@ impl TextRise {
 }
 
 impl TryFromObject<'_> for TextRise {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }

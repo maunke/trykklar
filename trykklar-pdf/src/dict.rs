@@ -2,8 +2,8 @@
 
 use crate::codec::{TryFromObject, TryIntoObject};
 use crate::error::{Field, FieldError, OptionalField};
-use crate::{Error, Result};
-use lopdf::{Dictionary, Document, Object, ObjectId};
+use crate::{Error, Pdf, Result};
+use lopdf::{Dictionary, Object, ObjectId};
 
 const PARENT_LIMIT: usize = 128;
 
@@ -32,20 +32,20 @@ pub trait DictKey: Sized {
 
 pub(crate) fn write<T: DictKey + TryIntoObject>(
     entry: T,
-    doc: &mut Document,
-    dict: impl FnOnce(&mut Document) -> Result<&mut Dictionary>,
+    pdf: &mut Pdf,
+    dict: impl FnOnce(&mut Pdf) -> Result<&mut Dictionary>,
 ) -> Result<()> {
-    let obj = entry.try_into_object(doc)?;
-    dict(doc)?.set(T::KEY, obj);
+    let obj = entry.try_into_object(pdf)?;
+    dict(pdf)?.set(T::KEY, obj);
     Ok(())
 }
 
-pub(crate) fn exists<T: Into<ObjectId>>(id: T, doc: &Document) -> Result<()> {
-    Ok(doc.get_dictionary(id.into()).map(|_| ())?)
+pub(crate) fn exists<T: Into<ObjectId>>(id: T, pdf: &Pdf) -> Result<()> {
+    Ok(pdf.doc().get_dictionary(id.into()).map(|_| ())?)
 }
 
-pub(crate) fn get_mut<T: Into<ObjectId>>(id: T, doc: &mut Document) -> Result<&mut Dictionary> {
-    Ok(doc.get_dictionary_mut(id.into())?)
+pub(crate) fn get_mut<T: Into<ObjectId>>(id: T, pdf: &mut Pdf) -> Result<&mut Dictionary> {
+    Ok(pdf.doc_mut().get_dictionary_mut(id.into())?)
 }
 
 // Get a mutable dictionary by the parent id in combination with a dict key, or by the id directly.
@@ -53,26 +53,28 @@ pub(crate) fn get_mut_by_parent_id_or_key<'a>(
     parent_id: impl Into<ObjectId>,
     id: Option<impl Into<ObjectId>>,
     key: &'static [u8],
-    doc: &'a mut Document,
+    pdf: &'a mut Pdf,
 ) -> Result<&'a mut Dictionary> {
     if let Some(id) = id {
-        get_mut(id, doc)
+        get_mut(id, pdf)
     } else {
-        Ok(doc
+        Ok(pdf
+            .doc_mut()
             .get_dictionary_mut(parent_id.into())?
             .get_mut(key)?
             .as_dict_mut()?)
     }
 }
 fn read<'a, T: DictKey>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     dict: &'a Dictionary,
     resolve: impl FnOnce(Option<ObjectId>, &'a Object) -> Result<T>,
 ) -> Field<T> {
     let Ok(obj) = dict.get(T::KEY) else {
         return Err(FieldError::Missing);
     };
-    doc.dereference(obj)
+    pdf.doc()
+        .dereference(obj)
         .map_err(Error::from)
         .and_then(|(id, o)| resolve(id, o))
         .map_err(FieldError::Invalid)
@@ -88,12 +90,12 @@ fn into_optional<T>(field: Field<T>) -> OptionalField<T> {
 
 /// Reads the field in a dictionary wrt. dereference and inheritance.
 pub(crate) fn read_field<'a, T: DictKey + TryFromObject<'a>>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     dict: &'a Dictionary,
 ) -> Field<T> {
     let mut dict = dict;
     for _ in 0..PARENT_LIMIT {
-        match read(doc, dict, |id, o| T::try_from_object(doc, id, o)) {
+        match read(pdf, dict, |id, o| T::try_from_object(pdf, id, o)) {
             Err(FieldError::Missing) => (),
             field => return field,
         }
@@ -104,33 +106,33 @@ pub(crate) fn read_field<'a, T: DictKey + TryFromObject<'a>>(
             return Err(FieldError::Missing);
         };
         let parent_id = parent.as_reference()?;
-        dict = doc.get_dictionary(parent_id)?;
+        dict = pdf.doc().get_dictionary(parent_id)?;
     }
     Err(FieldError::Invalid(Error::ParentLimit))
 }
 
 /// Reads the optional field in a dictionary wrt. dereference and inheritance.
 pub(crate) fn read_optional_field<'a, T: DictKey + TryFromObject<'a>>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     dict: &'a Dictionary,
 ) -> OptionalField<T> {
-    into_optional(read_field::<T>(doc, dict))
+    into_optional(read_field::<T>(pdf, dict))
 }
 
 /// Reads the field in a dictionary with a custom resolver.
 pub(crate) fn read_field_with_fn<'a, T: DictKey>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     dict: &'a Dictionary,
     resolve: impl FnOnce(&'a Object) -> Result<T>,
 ) -> Field<T> {
-    read(doc, dict, |_, o| resolve(o))
+    read(pdf, dict, |_, o| resolve(o))
 }
 
 /// Reads the optional field in a dictionary with a custom resolver.
 pub(crate) fn read_optional_field_with_fn<'a, T: DictKey>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     dict: &'a Dictionary,
     resolve: impl FnOnce(&'a Object) -> Result<T>,
 ) -> OptionalField<T> {
-    into_optional(read_field_with_fn(doc, dict, resolve))
+    into_optional(read_field_with_fn(pdf, dict, resolve))
 }

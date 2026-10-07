@@ -1,7 +1,7 @@
 //! PDF Datetime
 use crate::codec::{TryFromObject, TryIntoObject};
-use crate::{Error, Result};
-use lopdf::{Document, Object, decode_text_string, text_string};
+use crate::{Error, Pdf, Result};
+use lopdf::{Object, decode_text_string, text_string};
 use std::num::NonZero;
 use time::format_description::{BorrowedFormatItem, well_known};
 use time::macros::format_description;
@@ -136,7 +136,7 @@ impl TryFrom<String> for PdfDate {
 
 impl TryFromObject<'_> for PdfDate {
     fn try_from_object(
-        _doc: &'_ lopdf::Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -146,7 +146,7 @@ impl TryFromObject<'_> for PdfDate {
 }
 
 impl TryIntoObject for PdfDate {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         let date_string = self.try_to_pdf_date_string()?;
         Ok(text_string(&date_string))
     }

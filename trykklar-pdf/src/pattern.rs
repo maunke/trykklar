@@ -8,8 +8,8 @@ use crate::error::{
 };
 use crate::resources::Resources;
 use crate::unit::UserSpace;
-use crate::{ColorSpace, Error, Matrix, Rect, Result, object_id};
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use crate::{ColorSpace, Error, Matrix, Pdf, Rect, Result, object_id};
+use lopdf::{Dictionary, Object, ObjectId, Stream};
 use std::sync::Arc;
 
 /// Pattern
@@ -36,13 +36,13 @@ impl<'a> Pattern<'a> {
     pub(crate) fn resolve(
         pattern_key: &[u8],
         resource_dicts: &[&'a Dictionary],
-        doc: &'a Document,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
         for d in resource_dicts {
-            if let Ok(pattern_dict_obj) = d.get_deref(b"Pattern", doc) {
+            if let Ok(pattern_dict_obj) = d.get_deref(b"Pattern", pdf.doc()) {
                 let pattern_dict = pattern_dict_obj.as_dict()?;
                 if let Ok(pattern_obj_ref) = pattern_dict.get(pattern_key) {
-                    let (opt_obj_id, pattern_obj) = doc.dereference(pattern_obj_ref)?;
+                    let (opt_obj_id, pattern_obj) = pdf.doc().dereference(pattern_obj_ref)?;
                     let Some(obj_id) = opt_obj_id else {
                         return Err(Error::InvalidPdfObject(
                             "Pattern must be an indirect reference",
@@ -53,7 +53,7 @@ impl<'a> Pattern<'a> {
                             return Ok(Pattern::Tiling(Arc::new(TilingPattern::resolve(
                                 obj_id,
                                 tiling_stream,
-                                doc,
+                                pdf,
                             )?)));
                         }
                         Object::Dictionary(shading_dict) => {
@@ -61,7 +61,7 @@ impl<'a> Pattern<'a> {
                                 obj_id,
                                 shading_dict,
                                 resource_dicts,
-                                doc,
+                                pdf,
                             )?)));
                         }
                         _ => {
@@ -149,13 +149,13 @@ impl<'a> TilingPattern<'a> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub(crate) fn resolve(id: ObjectId, stream: &'a Stream, doc: &'a Document) -> Result<Self> {
+    pub(crate) fn resolve(id: ObjectId, stream: &'a Stream, pdf: &'a Pdf) -> Result<Self> {
         let id = TilingPatternId(id);
         let dict = &stream.dict;
-        let paint_type = read_field(doc, dict);
-        let resources = read_field(doc, dict);
-        let bbox = read_field(doc, dict);
-        let matrix = match read_optional_field(doc, dict) {
+        let paint_type = read_field(pdf, dict);
+        let resources = read_field(pdf, dict);
+        let bbox = read_field(pdf, dict);
+        let matrix = match read_optional_field(pdf, dict) {
             Some(Ok(m)) => Ok(m),
             Some(Err(e)) => Err(e),
             None => Ok(Matrix::IDENTITY),
@@ -206,7 +206,7 @@ impl DictKey for TilingPaintType {
 }
 
 impl<'a> TryFromObject<'a> for TilingPaintType {
-    fn try_from_object(_doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let paint_type = match obj.as_i64()? {
             1 => Self::Coloured,
             2 => Self::Uncoloured,
@@ -263,16 +263,16 @@ impl<'a> ShadingPattern {
         id: ObjectId,
         dict: &Dictionary,
         resource_dicts: &[&'a Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
     ) -> Result<Self> {
         let id = ShadingPatternId(id);
-        let matrix = match read_optional_field(doc, dict) {
+        let matrix = match read_optional_field(pdf, dict) {
             Some(Ok(m)) => Ok(m),
             Some(Err(e)) => Err(e.into()),
             None => Ok(Matrix::IDENTITY),
         };
         let shading =
-            read_field_with_fn(doc, dict, |obj| Shading::resolve(obj, resource_dicts, doc));
+            read_field_with_fn(pdf, dict, |obj| Shading::resolve(obj, resource_dicts, pdf));
 
         Ok(Self {
             id,
@@ -319,16 +319,16 @@ impl<'a> Shading {
     pub(crate) fn resolve(
         obj: &Object,
         resource_dicts: &[&'a Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
     ) -> Result<Self> {
-        let obj = doc.dereference(obj)?;
+        let obj = pdf.doc().dereference(obj)?;
         let dict = match obj.1 {
             Object::Dictionary(d) => d,
             Object::Stream(s) => &s.dict,
             _ => return Err(Error::InvalidPdfObject("Shading must be a dict or stream")),
         };
-        let color_space = match read_field_with_fn(doc, dict, |obj| {
-            ColorSpace::parse_object(obj, resource_dicts, doc, 0)
+        let color_space = match read_field_with_fn(pdf, dict, |obj| {
+            ColorSpace::parse_object(obj, resource_dicts, pdf, 0)
         }) {
             // As in the spec defined, Pattern colorspace is not allowed.
             Ok(ColorSpace::Pattern(_)) => {
@@ -336,7 +336,7 @@ impl<'a> Shading {
             }
             cs => cs,
         };
-        let bbox = read_optional_field(doc, dict);
+        let bbox = read_optional_field(pdf, dict);
 
         Ok(Shading { color_space, bbox })
     }

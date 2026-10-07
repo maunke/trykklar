@@ -5,8 +5,8 @@ use crate::error::{Field, FieldExt, OptionalField};
 use crate::font::Font;
 use crate::text::TextFontSize;
 use crate::unit::UserSpace;
-use crate::{Error, GraphicsState, Length, ObjectAsF64, Result};
-use lopdf::{Dictionary, Document, Object};
+use crate::{Error, GraphicsState, Length, ObjectAsF64, Pdf, Result};
+use lopdf::{Dictionary, Object};
 
 /// ISO 32000-1:2008 8.4.5 Table 58 – Entries in a Graphics State Parameter Dictionary
 #[derive(Debug, Clone)]
@@ -36,23 +36,23 @@ impl ExtGState {
     pub fn resolve<'a>(
         extgstate_key: &[u8],
         resource_dicts: &[&'a Dictionary],
-        doc: &'a Document,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
         for d in resource_dicts {
-            if let Ok(extgstate_dict_obj) = d.get_deref(b"ExtGState", doc) {
+            if let Ok(extgstate_dict_obj) = d.get_deref(b"ExtGState", pdf.doc()) {
                 let extgstate_dict = extgstate_dict_obj.as_dict()?;
                 if let Ok(Object::Dictionary(extgstate_dict)) =
-                    extgstate_dict.get_deref(extgstate_key, doc)
+                    extgstate_dict.get_deref(extgstate_key, pdf.doc())
                 {
-                    let overprint = read_optional_field(doc, extgstate_dict);
-                    let non_stroking_overprint = read_optional_field(doc, extgstate_dict);
-                    let overprint_mode = read_optional_field(doc, extgstate_dict);
-                    let font = read_optional_field(doc, extgstate_dict);
-                    let blend_mode = read_optional_field(doc, extgstate_dict);
-                    let soft_mask = read_optional_field(doc, extgstate_dict);
-                    let stroking_alpha = read_optional_field(doc, extgstate_dict);
-                    let non_stroking_alpha = read_optional_field(doc, extgstate_dict);
-                    let line_width = read_optional_field(doc, extgstate_dict);
+                    let overprint = read_optional_field(pdf, extgstate_dict);
+                    let non_stroking_overprint = read_optional_field(pdf, extgstate_dict);
+                    let overprint_mode = read_optional_field(pdf, extgstate_dict);
+                    let font = read_optional_field(pdf, extgstate_dict);
+                    let blend_mode = read_optional_field(pdf, extgstate_dict);
+                    let soft_mask = read_optional_field(pdf, extgstate_dict);
+                    let stroking_alpha = read_optional_field(pdf, extgstate_dict);
+                    let non_stroking_alpha = read_optional_field(pdf, extgstate_dict);
+                    let line_width = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -166,7 +166,7 @@ impl DictKey for OverprintMode {
 
 impl TryFromObject<'_> for OverprintMode {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -208,7 +208,7 @@ impl DictKey for Overprint {
 
 impl TryFromObject<'_> for Overprint {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -242,7 +242,7 @@ impl DictKey for NonStrokingOverprint {
 
 impl TryFromObject<'_> for NonStrokingOverprint {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -287,7 +287,7 @@ impl DictKey for StrokingAlpha {
 
 impl TryFromObject<'_> for StrokingAlpha {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -325,7 +325,7 @@ impl DictKey for NonStrokingAlpha {
 
 impl TryFromObject<'_> for NonStrokingAlpha {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -366,7 +366,7 @@ impl DictKey for LineWidth {
 
 impl TryFromObject<'_> for LineWidth {
     fn try_from_object(
-        _doc: &'_ lopdf::Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -446,7 +446,7 @@ impl DictKey for BlendMode {
 
 impl TryFromObject<'_> for BlendMode {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -454,7 +454,7 @@ impl TryFromObject<'_> for BlendMode {
             Object::Name(name) => Self::try_from(name.as_slice()),
             Object::Array(array) => {
                 for el in array {
-                    let rslt = Self::try_from_object(_doc, _id, el);
+                    let rslt = Self::try_from_object(_pdf, _id, el);
                     if rslt.is_ok() {
                         return rslt;
                     }
@@ -539,19 +539,15 @@ impl DictKey for SoftMask {
 }
 
 impl TryFromObject<'_> for SoftMask {
-    fn try_from_object(
-        doc: &'_ Document,
-        id: Option<lopdf::ObjectId>,
-        obj: &'_ Object,
-    ) -> Result<Self> {
-        let obj = doc.dereference(obj)?.1;
+    fn try_from_object(pdf: &'_ Pdf, id: Option<lopdf::ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let obj = pdf.doc().dereference(obj)?.1;
         match obj {
             Object::Name(name) => match name.as_slice() {
                 b"None" => Ok(Self::None),
                 _ => Err(Error::InvalidPdfObject("Softmask name should be None")),
             },
             Object::Dictionary(_) => {
-                let mask = Mask::try_from_object(doc, id, obj);
+                let mask = Mask::try_from_object(pdf, id, obj);
                 mask.map(Self::Mask)
             }
             _ => Err(Error::InvalidPdfObject("Softmask must be a name or dict")),
@@ -574,13 +570,13 @@ impl Mask {
 
 impl TryFromObject<'_> for Mask {
     fn try_from_object(
-        doc: &'_ Document,
+        pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
-        let obj = doc.dereference(obj)?;
+        let obj = pdf.doc().dereference(obj)?;
         let dict = obj.1.as_dict()?;
-        let sub_type = read_field(doc, dict);
+        let sub_type = read_field(pdf, dict);
         Ok(Self { sub_type })
     }
 }
@@ -611,7 +607,7 @@ impl DictKey for MaskSubType {
 
 impl TryFromObject<'_> for MaskSubType {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -648,19 +644,15 @@ impl DictKey for ExtGStateFont {
 }
 
 impl TryFromObject<'_> for ExtGStateFont {
-    fn try_from_object(
-        doc: &'_ Document,
-        id: Option<lopdf::ObjectId>,
-        obj: &'_ Object,
-    ) -> Result<Self> {
-        let obj = doc.dereference(obj)?.1;
+    fn try_from_object(pdf: &'_ Pdf, id: Option<lopdf::ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let obj = pdf.doc().dereference(obj)?.1;
         let [font_ref, size_obj] = &obj.as_array()?[..] else {
             return Err(Error::InvalidPdfObject(
                 "Ext G State Font must be an array [font_ref, font_size]",
             ));
         };
-        let font = Font::try_from_object(doc, id, font_ref);
-        let size = TextFontSize::try_from_object(doc, id, size_obj);
+        let font = Font::try_from_object(pdf, id, font_ref);
+        let size = TextFontSize::try_from_object(pdf, id, size_obj);
         Ok(Self { font, size })
     }
 }

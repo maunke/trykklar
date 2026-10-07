@@ -13,6 +13,7 @@ use std::path::Path;
 /// PDF
 ///
 /// It follows the ISO 32000-1:2008 specification.
+#[derive(Debug, Clone)]
 pub struct Pdf {
     doc: Document,
 }
@@ -38,7 +39,7 @@ impl Pdf {
         match self.doc.trailer.get(b"Root") {
             Ok(obj) => match self.doc.dereference(obj) {
                 Ok((Some(id), Object::Dictionary(dict))) => Ok(Catalog {
-                    doc: &self.doc,
+                    pdf: self,
                     id: CatalogId(id),
                     dict,
                 }),
@@ -55,7 +56,7 @@ impl Pdf {
     /// > (Optional; shall be an indirect reference) The document’s information dictionary (see
     /// > 14.3.3, "Document Information Dictionary").
     pub fn info(&self) -> Option<Result<Info<'_>>> {
-        read_optional_field(&self.doc, &self.doc.trailer)
+        read_optional_field(self, &self.doc.trailer)
     }
 
     /// Load [Pdf] from `path`.
@@ -80,7 +81,7 @@ impl Pdf {
         self.doc
             .get_pages()
             .into_values()
-            .map(|id| PdfPage::new(&self.doc, PdfPageId::new(id)))
+            .map(|id| PdfPage::new(self, PdfPageId::new(id)))
             .collect::<Vec<_>>()
     }
 
@@ -88,7 +89,7 @@ impl Pdf {
     pub fn page(&self, number: u32) -> Result<PdfPage<'_>> {
         let lopdf_number = number.checked_add(1).ok_or(Error::PageNotFound)?;
         match self.doc.get_pages().get(&lopdf_number) {
-            Some(&id) => Ok(PdfPage::new(&self.doc, PdfPageId::new(id))?),
+            Some(&id) => Ok(PdfPage::new(self, PdfPageId::new(id))?),
             None => Err(Error::PageNotFound),
         }
     }
@@ -97,7 +98,7 @@ impl Pdf {
     pub fn page_mut(&mut self, number: u32) -> Result<PdfPageMut<'_>> {
         let lopdf_number = number.checked_add(1).ok_or(Error::PageNotFound)?;
         match self.doc.get_pages().get(&lopdf_number) {
-            Some(&id) => Ok(PdfPageMut::new(&mut self.doc, PdfPageId::new(id))),
+            Some(&id) => Ok(PdfPageMut::new(self, PdfPageId::new(id))),
             None => Err(Error::PageNotFound),
         }
     }
@@ -129,7 +130,7 @@ object_id!(CatalogId);
 
 /// PDF catalog
 pub struct Catalog<'a> {
-    doc: &'a Document,
+    pdf: &'a Pdf,
     id: CatalogId,
     dict: &'a Dictionary,
 }
@@ -142,7 +143,7 @@ impl<'a> Catalog<'a> {
 
     /// Returns the oc properties.
     pub fn oc_properties(&self) -> Option<Result<OCProperties<'a>>> {
-        read_optional_field::<OCProperties>(self.doc, self.dict)
+        read_optional_field::<OCProperties>(self.pdf, self.dict)
     }
 }
 

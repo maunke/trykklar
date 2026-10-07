@@ -25,7 +25,7 @@ object_id!(OCPropertiesId);
 /// Find the supported fields implemented as methods accordingly to 8.11.4.2 Optional Content
 /// Properties Dictionary, Table 100 – Entries in the Optional Content Properties Dictionary
 pub struct OCProperties<'a> {
-    doc: &'a Document,
+    pdf: &'a Pdf,
     id: Option<OCPropertiesId>,
     dict: &'a Dictionary,
 }
@@ -38,12 +38,12 @@ impl<'a> OCProperties<'a> {
 
     /// See [`Ocgs`]
     pub fn ocgs(&self) -> Field<Ocgs> {
-        read_field::<Ocgs>(self.doc, self.dict)
+        read_field::<Ocgs>(self.pdf, self.dict)
     }
 
     /// See [`OcConfig`]
     pub fn default_config(&self) -> Field<OcConfig> {
-        read_field::<OcConfig>(self.doc, self.dict)
+        read_field::<OcConfig>(self.pdf, self.dict)
     }
 }
 
@@ -52,10 +52,10 @@ impl<'a> DictKey for OCProperties<'a> {
 }
 
 impl<'a> TryFromObject<'a> for OCProperties<'a> {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
             Object::Dictionary(dict) => Ok(Self {
-                doc,
+                pdf,
                 id: id.map(OCPropertiesId),
                 dict,
             }),
@@ -66,7 +66,7 @@ impl<'a> TryFromObject<'a> for OCProperties<'a> {
 
 /// Mutation object for [`OCProperties`].
 pub struct OCPropertiesMut<'a> {
-    doc: &'a mut Document,
+    pdf: &'a mut Pdf,
     catalog_id: CatalogId,
     id: Option<OCPropertiesId>,
 }
@@ -82,7 +82,7 @@ impl<'a> OCPropertiesMut<'a> {
             .id();
 
         Ok(Self {
-            doc: pdf.doc_mut(),
+            pdf,
             catalog_id,
             id,
         })
@@ -90,8 +90,8 @@ impl<'a> OCPropertiesMut<'a> {
 
     /// Sets the default config.
     pub fn set_default_config(&mut self, oc_config: OcConfig) -> Result<()> {
-        dict::write(oc_config, self.doc, |doc: &mut Document| {
-            dict::get_mut_by_parent_id_or_key(self.catalog_id, self.id, Self::KEY, doc)
+        dict::write(oc_config, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut_by_parent_id_or_key(self.catalog_id, self.id, Self::KEY, pdf)
         })
     }
 }
@@ -122,15 +122,16 @@ impl DictKey for Ocgs {
 }
 
 impl<'a> TryFromObject<'a> for Ocgs {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
             Object::Array(arr) => {
                 let mut ocgs = vec![];
                 for v in arr {
-                    let ocg = doc
+                    let ocg = pdf
+                        .doc()
                         .dereference(v)
                         .map_err(Into::into)
-                        .and_then(|(id, o)| Ocg::try_from_object(doc, id, o))?;
+                        .and_then(|(id, o)| Ocg::try_from_object(pdf, id, o))?;
                     ocgs.push(ocg);
                 }
                 Ok(Self(ocgs))
@@ -168,7 +169,7 @@ impl Ocg {
 }
 
 impl<'a> TryFromObject<'a> for Ocg {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let id = match id {
             Some(id) => id,
             None => {
@@ -178,7 +179,7 @@ impl<'a> TryFromObject<'a> for Ocg {
 
         match obj {
             Object::Dictionary(dict) => {
-                let name = match dict.get_deref(b"Name", doc) {
+                let name = match dict.get_deref(b"Name", pdf.doc()) {
                     Ok(v) => decode_text_string(v).map_err(Into::into),
                     Err(..) => Err(FieldError::Missing),
                 };
@@ -193,7 +194,7 @@ impl<'a> TryFromObject<'a> for Ocg {
 }
 
 impl TryIntoObject for Ocg {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(Object::Reference(self.id.into()))
     }
 }
@@ -390,25 +391,25 @@ impl OcConfig {
 }
 
 impl<'a> TryFromObject<'a> for OcConfig {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let Object::Dictionary(dict) = obj else {
             return Err(Error::InvalidPdfObject(
                 "configuration must be a dictionary",
             ));
         };
-        let base_state = match read_optional_field(doc, dict) {
+        let base_state = match read_optional_field(pdf, dict) {
             Some(bs) => bs,
             None => Ok(Default::default()),
         };
-        let on = match read_optional_field(doc, dict) {
+        let on = match read_optional_field(pdf, dict) {
             Some(bs) => bs,
             None => Ok(Default::default()),
         };
-        let off = match read_optional_field(doc, dict) {
+        let off = match read_optional_field(pdf, dict) {
             Some(bs) => bs,
             None => Ok(Default::default()),
         };
-        let order = match read_optional_field(doc, dict) {
+        let order = match read_optional_field(pdf, dict) {
             Some(bs) => bs,
             None => Ok(Default::default()),
         };
@@ -422,19 +423,19 @@ impl<'a> TryFromObject<'a> for OcConfig {
 }
 
 impl TryIntoObject for OcConfig {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        let default_config_id = doc.add_object(Dictionary::new());
-        dict::write(self.base_state?, doc, |doc: &mut Document| {
-            dict::get_mut(default_config_id, doc)
+    fn try_into_object(self, pdf: &mut Pdf) -> Result<Object> {
+        let default_config_id = pdf.doc_mut().add_object(Dictionary::new());
+        dict::write(self.base_state?, pdf, |pdf: &mut Pdf| {
+            dict::get_mut(default_config_id, pdf)
         })?;
-        dict::write(self.on?, doc, |doc: &mut Document| {
-            dict::get_mut(default_config_id, doc)
+        dict::write(self.on?, pdf, |pdf: &mut Pdf| {
+            dict::get_mut(default_config_id, pdf)
         })?;
-        dict::write(self.off?, doc, |doc: &mut Document| {
-            dict::get_mut(default_config_id, doc)
+        dict::write(self.off?, pdf, |pdf: &mut Pdf| {
+            dict::get_mut(default_config_id, pdf)
         })?;
-        dict::write(self.order?, doc, |doc: &mut Document| {
-            dict::get_mut(default_config_id, doc)
+        dict::write(self.order?, pdf, |pdf: &mut Pdf| {
+            dict::get_mut(default_config_id, pdf)
         })?;
         Ok(Object::Reference(default_config_id))
     }
@@ -467,14 +468,14 @@ impl DictKey for DOn {
 }
 
 impl TryFromObject<'_> for DOn {
-    fn try_from_object(doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let Object::Array(arr) = obj else {
             return Err(Error::InvalidPdfObject("D On must be an array"));
         };
         let mut ocg_set = HashSet::new();
         for element_obj in arr {
-            let (ocg_id, ocg_obj) = doc.dereference(element_obj)?;
-            let ocg = Ocg::try_from_object(doc, ocg_id, ocg_obj)?;
+            let (ocg_id, ocg_obj) = pdf.doc().dereference(element_obj)?;
+            let ocg = Ocg::try_from_object(pdf, ocg_id, ocg_obj)?;
             ocg_set.insert(ocg);
         }
         Ok(Self(ocg_set))
@@ -482,7 +483,7 @@ impl TryFromObject<'_> for DOn {
 }
 
 impl TryIntoObject for DOn {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         let ocgs = self
             .0
             .into_iter()
@@ -519,14 +520,14 @@ impl DictKey for DOff {
 }
 
 impl TryFromObject<'_> for DOff {
-    fn try_from_object(doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let Object::Array(arr) = obj else {
             return Err(Error::InvalidPdfObject("D Off must be an array"));
         };
         let mut ocg_set = HashSet::new();
         for element_obj in arr {
-            let (ocg_id, ocg_obj) = doc.dereference(element_obj)?;
-            let ocg = Ocg::try_from_object(doc, ocg_id, ocg_obj)?;
+            let (ocg_id, ocg_obj) = pdf.doc().dereference(element_obj)?;
+            let ocg = Ocg::try_from_object(pdf, ocg_id, ocg_obj)?;
             ocg_set.insert(ocg);
         }
         Ok(Self(ocg_set))
@@ -534,7 +535,7 @@ impl TryFromObject<'_> for DOff {
 }
 
 impl TryIntoObject for DOff {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         let ocgs = self
             .0
             .into_iter()
@@ -562,12 +563,12 @@ impl OcgGroup {
         &self.items
     }
 
-    fn into_array_of_objects(self, doc: &mut Document) -> Result<Vec<Object>> {
+    fn into_array_of_objects(self, pdf: &mut Pdf) -> Result<Vec<Object>> {
         let mut arr = Vec::new();
         if let Some(name) = &self.name {
             arr.push(text_string(name));
         }
-        let items_arr = d_order_items_to_object(self.items, doc)?;
+        let items_arr = d_order_items_to_object(self.items, pdf)?;
         arr.extend(items_arr);
         Ok(arr)
     }
@@ -591,10 +592,10 @@ impl OcgSubGroup {
         &self.body
     }
 
-    fn into_array_of_objects(self, doc: &mut Document) -> Result<Vec<Object>> {
+    fn into_array_of_objects(self, pdf: &mut Pdf) -> Result<Vec<Object>> {
         let mut arr = Vec::new();
-        arr.push(self.header.try_into_object(doc)?);
-        let body_items_arr = d_order_items_to_object(self.body, doc)?;
+        arr.push(self.header.try_into_object(pdf)?);
+        let body_items_arr = d_order_items_to_object(self.body, pdf)?;
         arr.push(Object::Array(body_items_arr));
         Ok(arr)
     }
@@ -675,7 +676,7 @@ impl DictKey for DOrder {
 
 /// This is the recursive resolving of arrays of DOrderItem as defined in [`DOrder`].
 fn d_order_from_array<'a>(
-    doc: &'a Document,
+    pdf: &'a Pdf,
     objects: &'a [Object],
     depth: usize,
     in_group: bool,
@@ -693,7 +694,7 @@ fn d_order_from_array<'a>(
     let mut obj_iter = objects.iter();
     let mut idx = 0;
     while let Some(obj) = obj_iter.next()
-        && let (id, obj) = doc.dereference(obj)?
+        && let (id, obj) = pdf.doc().dereference(obj)?
     {
         if let Ok(title) = decode_text_string(obj) {
             if idx > 0 {
@@ -711,7 +712,7 @@ fn d_order_from_array<'a>(
                 buffer_ocg.take(),
             ) {
                 (_, Object::Array(arr), None, None, Some(ocg)) => {
-                    let arr_items = d_order_from_array(doc, arr, depth + 1, true)?;
+                    let arr_items = d_order_from_array(pdf, arr, depth + 1, true)?;
                     items.push(
                         OcgSubGroup {
                             header: ocg,
@@ -721,12 +722,12 @@ fn d_order_from_array<'a>(
                     );
                 }
                 (_, Object::Array(arr), None, None, None) => {
-                    let arr_items = d_order_from_array(doc, arr, depth + 1, false)?;
+                    let arr_items = d_order_from_array(pdf, arr, depth + 1, false)?;
                     items.extend(arr_items);
                 }
                 (id, val, None, None, Some(ocg)) if in_group => {
                     items.push(ocg.into());
-                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    let ocg = Ocg::try_from_object(pdf, id, val)?;
                     buffer_ocg = Some(ocg);
                 }
                 (id, val, None, None, Some(ocg)) if !in_group && idx == 1 => {
@@ -734,20 +735,20 @@ fn d_order_from_array<'a>(
                         name: None,
                         items: vec![ocg.into()],
                     });
-                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    let ocg = Ocg::try_from_object(pdf, id, val)?;
                     buffer_ocg = Some(ocg);
                 }
                 (id, val, None, None, None) => {
-                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    let ocg = Ocg::try_from_object(pdf, id, val)?;
                     buffer_ocg = Some(ocg);
                 }
                 (id, val, None, Some(mut group), None) => {
-                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    let ocg = Ocg::try_from_object(pdf, id, val)?;
                     group.items.push(ocg.into());
                     buffer_group = Some(group);
                 }
                 (id, val, Some(title), None, None) => {
-                    let ocg = Ocg::try_from_object(doc, id, val)?;
+                    let ocg = Ocg::try_from_object(pdf, id, val)?;
                     buffer_group = Some(OcgGroup {
                         name: Some(title),
                         items: vec![ocg.into()],
@@ -779,22 +780,22 @@ fn d_order_from_array<'a>(
 }
 
 impl<'a> TryFromObject<'a> for DOrder {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
-            Object::Array(array) => Ok(Self(d_order_from_array(doc, array, 0, false)?)),
+            Object::Array(array) => Ok(Self(d_order_from_array(pdf, array, 0, false)?)),
             _ => Err(Error::InvalidPdfObject("DOrder must be an array")),
         }
     }
 }
 
-fn d_order_items_to_object(items: Vec<DOrderItem>, doc: &mut Document) -> Result<Vec<Object>> {
+fn d_order_items_to_object(items: Vec<DOrderItem>, pdf: &mut Pdf) -> Result<Vec<Object>> {
     let mut arr = Vec::new();
     for item in items.into_iter() {
         match item {
-            DOrderItem::Ocg(ocg) => arr.push(ocg.try_into_object(doc)?),
-            DOrderItem::OcgSubGroup(sub_group) => arr.extend(sub_group.into_array_of_objects(doc)?),
+            DOrderItem::Ocg(ocg) => arr.push(ocg.try_into_object(pdf)?),
+            DOrderItem::OcgSubGroup(sub_group) => arr.extend(sub_group.into_array_of_objects(pdf)?),
             DOrderItem::OcgGroup(group) => {
-                arr.push(Object::Array(group.into_array_of_objects(doc)?))
+                arr.push(Object::Array(group.into_array_of_objects(pdf)?))
             }
         }
     }
@@ -802,8 +803,8 @@ fn d_order_items_to_object(items: Vec<DOrderItem>, doc: &mut Document) -> Result
 }
 
 impl TryIntoObject for DOrder {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        Ok(Object::Array(d_order_items_to_object(self.0, doc)?))
+    fn try_into_object(self, pdf: &mut Pdf) -> Result<Object> {
+        Ok(Object::Array(d_order_items_to_object(self.0, pdf)?))
     }
 }
 
@@ -849,7 +850,7 @@ impl DictKey for BaseState {
 }
 
 impl<'a> TryFromObject<'a> for BaseState {
-    fn try_from_object(_doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let base_state = match obj.as_name()? {
             b"ON" => Self::On,
             b"OFF" => Self::Off,
@@ -865,7 +866,7 @@ impl<'a> TryFromObject<'a> for BaseState {
 }
 
 impl TryIntoObject for BaseState {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         let value = match self {
             Self::On => "ON",
             Self::Off => "OFF",
@@ -968,16 +969,16 @@ impl Oc {
     pub(crate) fn resolve(
         properties: &Object,
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
     ) -> Result<Self> {
         let (id, dict) = match properties {
             Object::Name(name) => {
                 for rd in resource_dicts {
-                    if let Ok(Object::Dictionary(props)) = rd.get_deref(b"Properties", doc)
+                    if let Ok(Object::Dictionary(props)) = rd.get_deref(b"Properties", pdf.doc())
                         && let Ok(entry) = props.get(name)
                     {
-                        let (id, obj) = doc.dereference(entry)?;
-                        return Self::from_dict(id, obj.as_dict()?, doc);
+                        let (id, obj) = pdf.doc().dereference(entry)?;
+                        return Self::from_dict(id, obj.as_dict()?, pdf);
                     }
                 }
                 return Err(Error::ResourceNotFound {
@@ -985,15 +986,15 @@ impl Oc {
                 });
             }
             other => {
-                let (id, obj) = doc.dereference(other)?;
+                let (id, obj) = pdf.doc().dereference(other)?;
                 (id, obj.as_dict()?)
             }
         };
 
-        Self::from_dict(id, dict, doc)
+        Self::from_dict(id, dict, pdf)
     }
 
-    fn from_dict(id: Option<ObjectId>, dict: &Dictionary, doc: &Document) -> Result<Self> {
+    fn from_dict(id: Option<ObjectId>, dict: &Dictionary, pdf: &Pdf) -> Result<Self> {
         let is_ocmd = matches!(
             dict.get(b"Type").and_then(Object::as_name).ok(),
             Some(b"OCMD")
@@ -1001,16 +1002,16 @@ impl Oc {
 
         if !is_ocmd {
             if id.is_none() {
-                let name_obj = dict.get_deref(b"Name", doc)?;
+                let name_obj = dict.get_deref(b"Name", pdf.doc())?;
                 let name = decode_text_string(name_obj)?;
                 return Ok(Oc::InlineOcg(InlineOcg { name }));
             }
-            let ocg = Ocg::try_from_object(doc, id, &Object::Dictionary(dict.clone()))?;
+            let ocg = Ocg::try_from_object(pdf, id, &Object::Dictionary(dict.clone()))?;
             return Ok(Oc::Ocg(ocg));
         }
 
-        let ocgs = read_optional_field(doc, dict);
-        let policy = match read_optional_field(doc, dict) {
+        let ocgs = read_optional_field(pdf, dict);
+        let policy = match read_optional_field(pdf, dict) {
             Some(bs) => bs,
             None => Ok(Default::default()),
         };
@@ -1069,7 +1070,7 @@ impl DictKey for OcmdPolicy {
 }
 
 impl TryFromObject<'_> for OcmdPolicy {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let policy = match obj.as_name()? {
             b"AllOn" => Self::AllOn,
             b"AnyOn" => Self::AnyOn,

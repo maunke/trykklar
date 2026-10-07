@@ -17,7 +17,7 @@ use crate::text::{
 };
 use crate::unit::UserSpace;
 use crate::xobject::XObject;
-use crate::{Error, Matrix, Rect, Result};
+use crate::{Error, Matrix, Pdf, Rect, Result};
 use lopdf::{Dictionary, Object};
 
 /// Content Stream Operator
@@ -132,14 +132,14 @@ impl<'a> Operator<'a> {
     pub(crate) fn resolve(
         operation: &lopdf::content::Operation,
         resource_dicts: &[&'a Dictionary],
-        doc: &'a lopdf::Document,
+        pdf: &'a Pdf,
         cache: &mut WalkerCache<'a>,
     ) -> Result<Self> {
         let operands = &operation.operands;
         let op = match operation.operator.as_str() {
             "Do" => Self::PaintXObject(match &operands[..] {
                 [Object::Name(xobject_key)] => cache.xobject.get_or_resolve(xobject_key, || {
-                    XObject::resolve(xobject_key, resource_dicts, doc)
+                    XObject::resolve(xobject_key, resource_dicts, pdf)
                 }),
                 _ => Err(Error::InvalidOperands),
             }),
@@ -151,13 +151,13 @@ impl<'a> Operator<'a> {
                 Self::ModifyCtm(matrix)
             }
             "w" => Self::SetLineWidth(match &operands[..] {
-                [w_obj] => LineWidth::try_from_object(doc, None, w_obj),
+                [w_obj] => LineWidth::try_from_object(pdf, None, w_obj),
                 _ => Err(Error::InvalidOperands),
             }),
             // 8.6.8 Table 74 - Colour Operators
             "CS" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, doc, &mut cache.color_space);
+                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
                 let color = cs
                     .as_ref()
                     .map(ColorSpace::default_color)
@@ -166,7 +166,7 @@ impl<'a> Operator<'a> {
             }
             "G" | "RG" | "K" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, doc, &mut cache.color_space);
+                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
                 let color = operands
                     .iter()
                     .map(|v| v.as_float().map_err(Error::from))
@@ -176,7 +176,7 @@ impl<'a> Operator<'a> {
             }
             "cs" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, doc, &mut cache.color_space);
+                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
                 let color = cs
                     .as_ref()
                     .map(ColorSpace::default_color)
@@ -185,7 +185,7 @@ impl<'a> Operator<'a> {
             }
             "g" | "rg" | "k" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, doc, &mut cache.color_space);
+                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
                 let color = operands
                     .iter()
                     .map(|v| v.as_float().map_err(Error::from))
@@ -210,13 +210,13 @@ impl<'a> Operator<'a> {
             "SCN" => Self::SetStrokingColor(resolve_scn_color(
                 operands,
                 resource_dicts,
-                doc,
+                pdf,
                 &mut cache.pattern,
             )),
             "scn" => Self::SetNonStrokingColor(resolve_scn_color(
                 operands,
                 resource_dicts,
-                doc,
+                pdf,
                 &mut cache.pattern,
             )),
             // 8.7.4.2 Shading Operator
@@ -225,12 +225,13 @@ impl<'a> Operator<'a> {
                     [Object::Name(shading_name)] => resource_dicts
                         .iter()
                         .find_map(|dict| {
-                            let Ok(Object::Dictionary(shadings)) = dict.get_deref(b"Shading", doc)
+                            let Ok(Object::Dictionary(shadings)) =
+                                dict.get_deref(b"Shading", pdf.doc())
                             else {
                                 return None; // this dict has no /Shading — keep looking
                             };
-                            let shading_obj = shadings.get_deref(shading_name, doc).ok()?; // name absent — keep looking
-                            Some(Shading::resolve(shading_obj, resource_dicts, doc)) // found — first match wins
+                            let shading_obj = shadings.get_deref(shading_name, pdf.doc()).ok()?; // name absent — keep looking
+                            Some(Shading::resolve(shading_obj, resource_dicts, pdf)) // found — first match wins
                         })
                         .unwrap_or(Err(Error::ResourceNotFound {
                             kind: ResourceKind::Shading,
@@ -295,10 +296,10 @@ impl<'a> Operator<'a> {
             }
             "Tf" => match operands[..] {
                 [Object::Name(ref font_key), ref size_obj] => {
-                    let size = TextFontSize::try_from_object(doc, None, size_obj);
+                    let size = TextFontSize::try_from_object(pdf, None, size_obj);
                     let font = cache
                         .font
-                        .get_or_resolve(font_key, || Font::resolve(font_key, resource_dicts, doc));
+                        .get_or_resolve(font_key, || Font::resolve(font_key, resource_dicts, pdf));
                     Self::SetFontSize { font, size }
                 }
                 _ => Self::SetFontSize {
@@ -308,35 +309,35 @@ impl<'a> Operator<'a> {
             },
             "Tc" => {
                 let tc = match &operands[..] {
-                    [obj] => CharSpace::try_from_object(doc, None, obj),
+                    [obj] => CharSpace::try_from_object(pdf, None, obj),
                     _ => Err(Error::InvalidPdfObject("tc operator must have one operand")),
                 };
                 Self::SetCharSpace(tc)
             }
             "Tw" => {
                 let tw = match &operands[..] {
-                    [obj] => WordSpace::try_from_object(doc, None, obj),
+                    [obj] => WordSpace::try_from_object(pdf, None, obj),
                     _ => Err(Error::InvalidPdfObject("tw operator must have one operand")),
                 };
                 Self::SetWordSpace(tw)
             }
             "Tz" => {
                 let tz = match &operands[..] {
-                    [obj] => HorizontalScale::try_from_object(doc, None, obj),
+                    [obj] => HorizontalScale::try_from_object(pdf, None, obj),
                     _ => Err(Error::InvalidPdfObject("tz operator must have one operand")),
                 };
                 Self::SetHorizontalScale(tz)
             }
             "TL" => {
                 let tl = match &operands[..] {
-                    [obj] => TextLeading::try_from_object(doc, None, obj),
+                    [obj] => TextLeading::try_from_object(pdf, None, obj),
                     _ => Err(Error::InvalidPdfObject("tl operator must have one operand")),
                 };
                 Self::SetTextLeading(tl)
             }
             "Ts" => {
                 let ts = match &operands[..] {
-                    [obj] => TextRise::try_from_object(doc, None, obj),
+                    [obj] => TextRise::try_from_object(pdf, None, obj),
                     _ => Err(Error::InvalidPdfObject("ts operator must have one operand")),
                 };
                 Self::SetTextRise(ts)
@@ -356,7 +357,7 @@ impl<'a> Operator<'a> {
                 let oc = match &operands[..] {
                     [Object::Name(tag), properties] => {
                         if tag == b"OC" {
-                            Ok(Some(Oc::resolve(properties, resource_dicts, doc)))
+                            Ok(Some(Oc::resolve(properties, resource_dicts, pdf)))
                         } else {
                             Ok(None)
                         }
@@ -371,7 +372,7 @@ impl<'a> Operator<'a> {
                 let ext_g_state = match &operands[..] {
                     [Object::Name(extgstate_key)] => {
                         cache.ext_gstate.get_or_resolve(extgstate_key, || {
-                            ExtGState::resolve(extgstate_key, resource_dicts, doc)
+                            ExtGState::resolve(extgstate_key, resource_dicts, pdf)
                         })
                     }
                     _ => Err(Error::InvalidOperands),
@@ -397,7 +398,7 @@ impl<'a> Operator<'a> {
 fn resolve_scn_color<'a>(
     operands: &[Object],
     resource_dicts: &[&'a Dictionary],
-    doc: &'a lopdf::Document,
+    pdf: &'a Pdf,
     cache: &mut ResolvedCache<Pattern<'a>>,
 ) -> Result<Color<'a>> {
     let mut scn_operands = operands.to_owned();
@@ -408,7 +409,7 @@ fn resolve_scn_color<'a>(
     {
         scn_operands.pop();
         pattern = Some(cache.get_or_resolve(pattern_name, || {
-            Pattern::resolve(pattern_name, resource_dicts, doc)
+            Pattern::resolve(pattern_name, resource_dicts, pdf)
         })?);
     }
     let mut values: Option<Box<[f32]>> = None;

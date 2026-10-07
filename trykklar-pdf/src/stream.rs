@@ -1,10 +1,9 @@
 //! Stream Objects
 
-use lopdf::{Document, Object, ObjectId};
-
 use crate::codec::TryFromObject;
 use crate::dict::DictKey;
-use crate::{Error, Result};
+use crate::{Error, Pdf, Result};
+use lopdf::{Object, ObjectId};
 
 /// Filter
 ///
@@ -92,13 +91,13 @@ impl TryFrom<&[u8]> for FilterName {
 }
 
 impl TryFromObject<'_> for StreamFilter {
-    fn try_from_object(doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let names_vec: Vec<&[u8]> = match obj {
             Object::Name(name) => vec![name],
             Object::Array(arr) => {
                 let mut elements = Vec::new();
                 for el in arr.iter() {
-                    let el_name = doc.dereference(el)?.1.as_name()?;
+                    let el_name = pdf.doc().dereference(el)?.1.as_name()?;
                     elements.push(el_name);
                 }
                 elements

@@ -1,9 +1,9 @@
 //! Resource Dictionaries
 
-use crate::Result;
 use crate::codec::TryFromObject;
 use crate::dict::DictKey;
-use lopdf::{Dictionary, Document, Object, ObjectId};
+use crate::{Pdf, Result};
+use lopdf::{Dictionary, Object, ObjectId};
 
 /// Resource Dictionary
 ///
@@ -38,7 +38,7 @@ impl DictKey for Resources<'_> {
 }
 
 impl<'a> TryFromObject<'a> for Resources<'a> {
-    fn try_from_object(_doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         Ok(Self(obj.as_dict()?))
     }
 }

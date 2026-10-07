@@ -4,8 +4,8 @@ use crate::content::TryFromOperands;
 use crate::dict::{DictKey, read_field, read_optional_field};
 use crate::error::{Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResultExt};
 use crate::unit::UserSpace;
-use crate::{Error, Matrix, Rect, Result, object_id};
-use lopdf::{Dictionary, Document, Object, ObjectId};
+use crate::{Error, Matrix, Pdf, Rect, Result, object_id};
+use lopdf::{Dictionary, Object, ObjectId};
 use std::sync::Arc;
 
 object_id!(FontId);
@@ -24,8 +24,8 @@ impl std::ops::Deref for Font {
 }
 
 impl TryFromObject<'_> for Font {
-    fn try_from_object(doc: &'_ Document, id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
-        let font = FontKind::try_from_object(doc, id, obj)?;
+    fn try_from_object(pdf: &'_ Pdf, id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let font = FontKind::try_from_object(pdf, id, obj)?;
         Ok(Self(Arc::new(font)))
     }
 }
@@ -34,9 +34,9 @@ impl Font {
     pub(crate) fn resolve<'a>(
         font_key: &[u8],
         resource_dicts: &[&'a Dictionary],
-        doc: &'a Document,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
-        let font_kind = FontKind::resolve(font_key, resource_dicts, doc)?;
+        let font_kind = FontKind::resolve(font_key, resource_dicts, pdf)?;
         Ok(Self(Arc::new(font_kind)))
     }
 }
@@ -78,16 +78,16 @@ pub enum FontKind {
 }
 
 impl TryFromObject<'_> for FontKind {
-    fn try_from_object(doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
-        let (id, font_obj) = doc.dereference(obj)?;
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let (id, font_obj) = pdf.doc().dereference(obj)?;
         let dict = font_obj.as_dict()?;
-        Ok(match read_field::<FontSubtype>(doc, dict)? {
-            FontSubtype::Type1 => FontKind::Type1(SimpleFont::try_from_object(doc, id, font_obj)?),
+        Ok(match read_field::<FontSubtype>(pdf, dict)? {
+            FontSubtype::Type1 => FontKind::Type1(SimpleFont::try_from_object(pdf, id, font_obj)?),
             FontSubtype::TrueType => {
-                FontKind::TrueType(SimpleFont::try_from_object(doc, id, font_obj)?)
+                FontKind::TrueType(SimpleFont::try_from_object(pdf, id, font_obj)?)
             }
-            FontSubtype::Type3 => FontKind::Type3(Type3Font::try_from_object(doc, id, font_obj)?),
-            FontSubtype::Type0 => FontKind::Type0(Type0Font::try_from_object(doc, id, font_obj)?),
+            FontSubtype::Type3 => FontKind::Type3(Type3Font::try_from_object(pdf, id, font_obj)?),
+            FontSubtype::Type0 => FontKind::Type0(Type0Font::try_from_object(pdf, id, font_obj)?),
         })
     }
 }
@@ -160,10 +160,10 @@ impl FontKind {
     fn resolve<'a>(
         font_key: &[u8],
         resource_dicts: &[&'a Dictionary],
-        doc: &'a Document,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
         for d in resource_dicts {
-            let Ok(font_subdict) = d.get_deref(b"Font", doc) else {
+            let Ok(font_subdict) = d.get_deref(b"Font", pdf.doc()) else {
                 continue;
             };
             let Ok(font_dict) = font_subdict.as_dict() else {
@@ -172,7 +172,7 @@ impl FontKind {
             let Ok(font_entry) = font_dict.get(font_key) else {
                 continue;
             };
-            return Self::try_from_object(doc, None, font_entry);
+            return Self::try_from_object(pdf, None, font_entry);
         }
         Err(Error::FontNotFound(font_key.into()))
     }
@@ -205,7 +205,7 @@ impl DictKey for FontSubtype {
 }
 
 impl TryFromObject<'_> for FontSubtype {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(match obj.as_name()? {
             b"Type1" | b"MMType1" => Self::Type1,
             b"TrueType" => Self::TrueType,
@@ -294,20 +294,20 @@ impl SimpleFont {
 }
 
 impl TryFromObject<'_> for SimpleFont {
-    fn try_from_object(doc: &'_ Document, id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(pdf: &'_ Pdf, id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let Some(id) = id else {
             return Err(Error::InvalidPdfObject("Font dict must have an object id"));
         };
         let id = FontId(id);
         let dict = obj.as_dict()?;
-        let base_font = read_field::<BaseFont>(doc, dict);
+        let base_font = read_field::<BaseFont>(pdf, dict);
         let standard = base_font
             .as_ref()
             .ok()
             .and_then(StandardFont::from_base_font);
-        let first_char = read_field::<FirstChar>(doc, dict);
-        let widths = read_field::<Widths>(doc, dict);
-        let descriptor = read_field::<FontDescriptor>(doc, dict);
+        let first_char = read_field::<FirstChar>(pdf, dict);
+        let widths = read_field::<Widths>(pdf, dict);
+        let descriptor = read_field::<FontDescriptor>(pdf, dict);
         Ok(Self {
             id,
             base_font,
@@ -454,16 +454,16 @@ impl Type3Font {
 }
 
 impl<'a> TryFromObject<'a> for Type3Font {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let Some(id) = id else {
             return Err(Error::InvalidPdfObject("Font dict must have an object id"));
         };
         let id = FontId(id);
         let dict = obj.as_dict()?;
-        let font_matrix = read_field::<FontMatrix>(doc, dict);
-        let first_char = read_field::<FirstChar>(doc, dict);
-        let widths = read_field::<Widths>(doc, dict);
-        let font_bbox = read_field::<FontBBox>(doc, dict);
+        let font_matrix = read_field::<FontMatrix>(pdf, dict);
+        let first_char = read_field::<FirstChar>(pdf, dict);
+        let widths = read_field::<Widths>(pdf, dict);
+        let font_bbox = read_field::<FontBBox>(pdf, dict);
         Ok(Self {
             id,
             font_matrix,
@@ -513,15 +513,15 @@ impl Type0Font {
 }
 
 impl<'a> TryFromObject<'a> for Type0Font {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let Some(id) = id else {
             return Err(Error::InvalidPdfObject("Font dict must have an object id"));
         };
         let id = FontId(id);
         let dict = obj.as_dict()?;
-        let base_font = read_field(doc, dict);
-        let encoding = read_field(doc, dict);
-        let descendant = read_field(doc, dict);
+        let base_font = read_field(pdf, dict);
+        let encoding = read_field(pdf, dict);
+        let descendant = read_field(pdf, dict);
         Ok(Self {
             id,
             base_font,
@@ -559,14 +559,14 @@ impl DictKey for DescendantFonts {
 }
 
 impl<'a> TryFromObject<'a> for DescendantFonts {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let [cid] = &obj.as_array()?[..] else {
             return Err(Error::InvalidPdfObject(
                 "Type0 font must have exactly one descendant",
             ));
         };
-        let (cid_id, cid_obj) = doc.dereference(cid)?;
-        Ok(Self(CidFont::try_from_object(doc, cid_id, cid_obj)?))
+        let (cid_id, cid_obj) = pdf.doc().dereference(cid)?;
+        Ok(Self(CidFont::try_from_object(pdf, cid_id, cid_obj)?))
     }
 }
 
@@ -648,19 +648,19 @@ impl CidFont {
 }
 
 impl<'a> TryFromObject<'a> for CidFont {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let Some(id) = id else {
             return Err(Error::InvalidPdfObject("cid font must have an object id"));
         };
         let id = FontId(id);
         let dict = obj.as_dict()?;
-        let subtype = read_field(doc, dict);
-        let default_width = match read_optional_field(doc, dict) {
+        let subtype = read_field(pdf, dict);
+        let default_width = match read_optional_field(pdf, dict) {
             None => Ok(Default::default()),
             Some(dw) => dw,
         };
-        let widths = read_optional_field(doc, dict);
-        let descriptor = read_field(doc, dict);
+        let widths = read_optional_field(pdf, dict);
+        let descriptor = read_field(pdf, dict);
         Ok(Self {
             id,
             subtype,
@@ -689,7 +689,7 @@ impl DictKey for CidSubtype {
 }
 
 impl TryFromObject<'_> for CidSubtype {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(match obj.as_name()? {
             b"CIDFontType0" => Self::Type0,
             b"CIDFontType2" => Self::Type2,
@@ -742,7 +742,7 @@ impl DictKey for FontDescriptor {
 }
 
 impl<'a> TryFromObject<'a> for FontDescriptor {
-    fn try_from_object(doc: &'a Document, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         let dict = obj.as_dict()?;
         let font_file_kind = if dict.has(b"FontFile") {
             Some(FontFileKind::Type1)
@@ -753,7 +753,7 @@ impl<'a> TryFromObject<'a> for FontDescriptor {
         } else {
             None
         };
-        let font_bbox = read_field(doc, dict);
+        let font_bbox = read_field(pdf, dict);
         Ok(Self {
             font_bbox,
             font_file_kind,
@@ -799,8 +799,8 @@ impl DictKey for FontBBox {
 }
 
 impl<'a> TryFromObject<'a> for FontBBox {
-    fn try_from_object(doc: &'a Document, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
-        let rect = Rect::try_from_object(doc, id, obj)?;
+    fn try_from_object(pdf: &'a Pdf, id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
+        let rect = Rect::try_from_object(pdf, id, obj)?;
         let stated = [
             rect.origin.x.get(),
             rect.origin.y.get(),
@@ -840,7 +840,7 @@ impl DictKey for BaseFont {
 }
 
 impl TryFromObject<'_> for BaseFont {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(Self(String::from_utf8_lossy(obj.as_name()?).into_owned()))
     }
 }
@@ -862,7 +862,7 @@ impl DictKey for FirstChar {
 }
 
 impl TryFromObject<'_> for FirstChar {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(Self(obj.as_i64()? as u32))
     }
 }
@@ -899,11 +899,11 @@ impl DictKey for Widths {
 }
 
 impl TryFromObject<'_> for Widths {
-    fn try_from_object(doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         let widths = obj
             .as_array()?
             .iter()
-            .map(|w| doc.dereference(w)?.1.as_f64())
+            .map(|w| pdf.doc().dereference(w)?.1.as_f64())
             .collect::<Result<Vec<_>>>()?;
         Ok(Self(widths))
     }
@@ -933,7 +933,7 @@ impl DictKey for CidDefaultWidth {
 }
 
 impl TryFromObject<'_> for CidDefaultWidth {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(Self(obj.as_f64()?))
     }
 }
@@ -982,7 +982,7 @@ impl DictKey for FontMatrix {
 }
 
 impl TryFromObject<'_> for FontMatrix {
-    fn try_from_object(_doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         Ok(Self(Matrix::try_from_operands(obj.as_array()?)?))
     }
 }
@@ -1024,7 +1024,7 @@ impl DictKey for CMapEncoding {
 }
 
 impl TryFromObject<'_> for CMapEncoding {
-    fn try_from_object(_doc: &Document, id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(_pdf: &Pdf, id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         match obj {
             Object::Name(name) => Ok(match name.as_slice() {
                 b"Identity-H" => CMapEncoding::IdentityH,
@@ -1096,7 +1096,7 @@ impl DictKey for CidWidthMap {
 }
 
 impl TryFromObject<'_> for CidWidthMap {
-    fn try_from_object(doc: &Document, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
+    fn try_from_object(pdf: &Pdf, _id: Option<ObjectId>, obj: &Object) -> Result<Self> {
         let arr = obj.as_array()?;
         let position_err = || Error::InvalidPdfObject("malformed CIDFont /W array");
         let array_el = |i: usize| arr.get(i).ok_or_else(position_err);
@@ -1104,19 +1104,19 @@ impl TryFromObject<'_> for CidWidthMap {
         let mut entries = Vec::new();
         let mut i = 0;
         while i < arr.len() {
-            let start = doc.dereference(array_el(i)?)?.1.as_i64()? as u32;
-            match doc.dereference(array_el(i + 1)?)?.1 {
+            let start = pdf.doc().dereference(array_el(i)?)?.1.as_i64()? as u32;
+            match pdf.doc().dereference(array_el(i + 1)?)?.1 {
                 Object::Array(list) => {
                     let widths = list
                         .iter()
-                        .map(|w| deref_f64(w, doc))
+                        .map(|w| deref_f64(w, pdf))
                         .collect::<Result<Vec<_>>>()?;
                     entries.push(CidWidths::List { start, widths });
                     i += 2;
                 }
                 end => {
                     let end = end.as_i64()? as u32;
-                    let width = deref_f64(array_el(i + 2)?, doc)?;
+                    let width = deref_f64(array_el(i + 2)?, pdf)?;
                     entries.push(CidWidths::Range { start, end, width });
                     i += 3;
                 }

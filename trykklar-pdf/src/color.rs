@@ -3,8 +3,8 @@ use crate::codec::{TryFromObject, deref_array, deref_name};
 use crate::content::ResolvedCache;
 use crate::dict::{DictKey, read_field};
 use crate::error::{Field, FieldExt, ResultExt};
-use crate::{Error, ImageId, Result, ShadingPattern, TilingPattern};
-use lopdf::{Dictionary, Document, Object, ObjectId};
+use crate::{Error, ImageId, Pdf, Result, ShadingPattern, TilingPattern};
+use lopdf::{Dictionary, Object, ObjectId};
 use std::hash::Hash;
 use std::sync::Arc;
 
@@ -316,15 +316,15 @@ impl Hash for IccBased {
 }
 
 impl IccBased {
-    fn resolve(stream_obj: &Object, doc: &Document) -> Result<Self> {
-        let stream_obj = doc.dereference(stream_obj)?;
+    fn resolve(stream_obj: &Object, pdf: &Pdf) -> Result<Self> {
+        let stream_obj = pdf.doc().dereference(stream_obj)?;
         let stream_id = stream_obj.0.ok_or(Error::InvalidPdfObject(
             "ICCBased profile must be an indirect stream",
         ))?;
         let id = IccBasedId::Object(stream_id);
         let stream = stream_obj.1.as_stream()?;
         let dict = &stream.dict;
-        let n = read_field(doc, dict);
+        let n = read_field(pdf, dict);
         let content = stream.get_plain_content()?;
         let profile_id = IccProfileId::from_profile(&content);
         let description = IccProfileDescription::from_profile(&content);
@@ -392,7 +392,7 @@ impl DictKey for IccComponents {
 
 impl TryFromObject<'_> for IccComponents {
     fn try_from_object(
-        _doc: &'_ Document,
+        _doc: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ Object,
     ) -> Result<Self> {
@@ -506,12 +506,12 @@ impl ColorSpace {
     pub(crate) fn resolve(
         value: &lopdf::content::Operation,
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
         cache: &mut ResolvedCache<Self>,
     ) -> Result<Self> {
         let lopdf::content::Operation { operator, operands } = value;
         let color_space = match operator.as_str() {
-            "CS" | "cs" => Self::parse_cs(operands, resource_dicts, doc, cache)?,
+            "CS" | "cs" => Self::parse_cs(operands, resource_dicts, pdf, cache)?,
             "G" | "g" => Self::DeviceGray,
             "RG" | "rg" => Self::DeviceRgb,
             "K" | "k" => Self::DeviceCmyk,
@@ -523,13 +523,13 @@ impl ColorSpace {
     pub(crate) fn parse_cs(
         operands: &[Object],
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
         cache: &mut ResolvedCache<Self>,
     ) -> Result<Self> {
         let [Object::Name(name)] = operands else {
             return Err(Error::InvalidOperands);
         };
-        cache.get_or_resolve(name, || Self::parse_name(name, resource_dicts, doc, 0))
+        cache.get_or_resolve(name, || Self::parse_name(name, resource_dicts, pdf, 0))
     }
 
     const MAX_CYCLES: usize = 128;
@@ -537,7 +537,7 @@ impl ColorSpace {
     fn parse_name(
         name: &[u8],
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
         cycle_count: usize,
     ) -> Result<Self> {
         let cycle_count = cycle_count + 1;
@@ -552,10 +552,10 @@ impl ColorSpace {
             key_name => {
                 for d in resource_dicts {
                     if let Ok((_, Object::Dictionary(cs_dict))) =
-                        d.get(b"ColorSpace").and_then(|o| doc.dereference(o))
+                        d.get(b"ColorSpace").and_then(|o| pdf.doc().dereference(o))
                         && let Ok(cs_obj) = cs_dict.get(key_name)
                     {
-                        return Self::parse_object(cs_obj, resource_dicts, doc, cycle_count);
+                        return Self::parse_object(cs_obj, resource_dicts, pdf, cycle_count);
                     }
                 }
                 return Err(Error::UndefinedColorSpace);
@@ -567,16 +567,16 @@ impl ColorSpace {
     pub(crate) fn parse_object(
         obj: &Object,
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
         cycle_count: usize,
     ) -> Result<Self> {
         let cycle_count = cycle_count + 1;
         if cycle_count >= Self::MAX_CYCLES {
             return Err(Error::InvalidColorSpace);
         }
-        let (_, obj) = doc.dereference(obj)?;
+        let (_, obj) = pdf.doc().dereference(obj)?;
         match obj {
-            Object::Name(name) => Self::parse_name(name, resource_dicts, doc, cycle_count),
+            Object::Name(name) => Self::parse_name(name, resource_dicts, pdf, cycle_count),
             Object::Array(arr) => {
                 let Some(Object::Name(cs_name)) = arr.first() else {
                     return Err(Error::InvalidColorSpace);
@@ -589,19 +589,19 @@ impl ColorSpace {
                         let Some(stream_obj) = arr.get(1) else {
                             return Err(Error::InvalidOperands);
                         };
-                        Self::IccBased(Arc::new(IccBased::resolve(stream_obj, doc)?))
+                        Self::IccBased(Arc::new(IccBased::resolve(stream_obj, pdf)?))
                     }
                     b"Indexed" => {
                         let [_, ref base_obj, ref _hival, ref _lookup] = arr[..] else {
                             return Err(Error::InvalidColorSpace);
                         };
-                        let base = Self::parse_object(base_obj, resource_dicts, doc, cycle_count)?;
+                        let base = Self::parse_object(base_obj, resource_dicts, pdf, cycle_count)?;
                         Self::Indexed(Indexed { base }.into())
                     }
                     b"Pattern" => match arr.get(1) {
                         Some(base_obj) => {
                             let base =
-                                Self::parse_object(base_obj, resource_dicts, doc, cycle_count)?;
+                                Self::parse_object(base_obj, resource_dicts, pdf, cycle_count)?;
                             if matches!(base, Self::Pattern(..)) {
                                 return Err(Error::InvalidColorSpaceNestedPattern);
                             }
@@ -613,7 +613,7 @@ impl ColorSpace {
                         let Some(arr_el) = arr.get(1) else {
                             return Err(Error::InvalidColorSpace);
                         };
-                        let colorant_bytes = deref_name(arr_el, doc)?;
+                        let colorant_bytes = deref_name(arr_el, pdf)?;
 
                         let colorant_name = match colorant_bytes {
                             b"All" => ColorantName::All,
@@ -625,7 +625,7 @@ impl ColorSpace {
                         let alternate = Self::parse_object(
                             arr.get(2).ok_or(Error::InvalidColorSpace)?,
                             resource_dicts,
-                            doc,
+                            pdf,
                             cycle_count,
                         )?;
                         Self::Separation(
@@ -640,10 +640,10 @@ impl ColorSpace {
                         let Some(arr_el) = arr.get(1) else {
                             return Err(Error::InvalidColorSpace);
                         };
-                        let name_objects = deref_array(arr_el, doc)?;
+                        let name_objects = deref_array(arr_el, pdf)?;
                         let mut names: Vec<ColorantName> = Vec::new();
                         for name_obj in name_objects {
-                            let name_bytes = deref_name(name_obj, doc)?;
+                            let name_bytes = deref_name(name_obj, pdf)?;
                             let colorant_name = match name_bytes {
                                 b"All" => return Err(Error::InvalidColorSpace),
                                 b"None" => ColorantName::None,
@@ -656,7 +656,7 @@ impl ColorSpace {
                         let alternate = Self::parse_object(
                             arr.get(2).ok_or(Error::InvalidColorSpace)?,
                             resource_dicts,
-                            doc,
+                            pdf,
                             cycle_count,
                         )?;
                         Self::DeviceN(DeviceN::try_new(names, alternate)?.into())

@@ -5,7 +5,7 @@ use crate::datetime::PdfDate;
 use crate::dict::{self, DictKey, read_optional_field};
 use crate::error::OptionalField;
 use crate::{Error, Pdf, Result, object_id};
-use lopdf::{Dictionary, Document, Object, decode_text_string, text_string};
+use lopdf::{Dictionary, Object, decode_text_string, text_string};
 
 object_id!(InfoId);
 
@@ -18,7 +18,7 @@ object_id!(InfoId);
 ///
 /// Table 317 – Entries in the document information dictionary
 pub struct Info<'a> {
-    pub(crate) doc: &'a Document,
+    pub(crate) pdf: &'a Pdf,
     pub(crate) id: InfoId,
     pub(crate) dict: &'a Dictionary,
 }
@@ -31,42 +31,42 @@ impl<'a> Info<'a> {
 
     /// Returns the [`Title`].
     pub fn title(&self) -> OptionalField<Title> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`Author`].
     pub fn author(&self) -> OptionalField<Author> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`Subject`].
     pub fn subject(&self) -> OptionalField<Subject> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`Keywords`].
     pub fn keywords(&self) -> OptionalField<Keywords> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`Creator`].
     pub fn creator(&self) -> OptionalField<Creator> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`Producer`].
     pub fn producer(&self) -> OptionalField<Producer> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`CreationDate`].
     pub fn creation_date(&self) -> OptionalField<CreationDate> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 
     /// Returns the [`ModDate`].
     pub fn mod_date(&self) -> OptionalField<ModDate> {
-        read_optional_field(self.doc, self.dict)
+        read_optional_field(self.pdf, self.dict)
     }
 }
 
@@ -75,11 +75,7 @@ impl DictKey for Info<'_> {
 }
 
 impl<'a> TryFromObject<'a> for Info<'a> {
-    fn try_from_object(
-        doc: &'a Document,
-        id: Option<lopdf::ObjectId>,
-        obj: &'a Object,
-    ) -> Result<Self> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<lopdf::ObjectId>, obj: &'a Object) -> Result<Self> {
         let dict = obj.as_dict()?;
         let Some(obj_id) = id else {
             return Err(Error::InvalidPdfObject(
@@ -87,7 +83,7 @@ impl<'a> TryFromObject<'a> for Info<'a> {
             ));
         };
         let id = InfoId(obj_id);
-        Ok(Self { doc, id, dict })
+        Ok(Self { pdf, id, dict })
     }
 }
 
@@ -116,7 +112,7 @@ impl DictKey for Title {
 
 impl TryFromObject<'_> for Title {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -126,7 +122,7 @@ impl TryFromObject<'_> for Title {
 }
 
 impl TryIntoObject for Title {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -156,7 +152,7 @@ impl DictKey for Author {
 
 impl TryFromObject<'_> for Author {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -166,7 +162,7 @@ impl TryFromObject<'_> for Author {
 }
 
 impl TryIntoObject for Author {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -196,7 +192,7 @@ impl DictKey for Subject {
 
 impl TryFromObject<'_> for Subject {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -206,7 +202,7 @@ impl TryFromObject<'_> for Subject {
 }
 
 impl TryIntoObject for Subject {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -236,7 +232,7 @@ impl DictKey for Keywords {
 
 impl TryFromObject<'_> for Keywords {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -246,7 +242,7 @@ impl TryFromObject<'_> for Keywords {
 }
 
 impl TryIntoObject for Keywords {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -277,7 +273,7 @@ impl DictKey for Creator {
 
 impl TryFromObject<'_> for Creator {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -287,7 +283,7 @@ impl TryFromObject<'_> for Creator {
 }
 
 impl TryIntoObject for Creator {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -318,7 +314,7 @@ impl DictKey for Producer {
 
 impl TryFromObject<'_> for Producer {
     fn try_from_object(
-        _doc: &'_ Document,
+        _pdf: &'_ Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
@@ -328,7 +324,7 @@ impl TryFromObject<'_> for Producer {
 }
 
 impl TryIntoObject for Producer {
-    fn try_into_object(self, _doc: &mut Document) -> Result<Object> {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
         Ok(text_string(self.get()))
     }
 }
@@ -359,18 +355,18 @@ impl DictKey for CreationDate {
 
 impl TryFromObject<'_> for CreationDate {
     fn try_from_object(
-        doc: &'_ Document,
+        pdf: &'_ Pdf,
         id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
-        let creation_date = PdfDate::try_from_object(doc, id, obj)?;
+        let creation_date = PdfDate::try_from_object(pdf, id, obj)?;
         Ok(Self(creation_date))
     }
 }
 
 impl TryIntoObject for CreationDate {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        self.0.try_into_object(doc)
+    fn try_into_object(self, pdf: &mut Pdf) -> Result<Object> {
+        self.0.try_into_object(pdf)
     }
 }
 
@@ -401,43 +397,43 @@ impl DictKey for ModDate {
 
 impl TryFromObject<'_> for ModDate {
     fn try_from_object(
-        doc: &'_ Document,
+        pdf: &'_ Pdf,
         id: Option<lopdf::ObjectId>,
         obj: &'_ lopdf::Object,
     ) -> Result<Self> {
-        let mod_date = PdfDate::try_from_object(doc, id, obj)?;
+        let mod_date = PdfDate::try_from_object(pdf, id, obj)?;
         Ok(Self(mod_date))
     }
 }
 
 impl TryIntoObject for ModDate {
-    fn try_into_object(self, doc: &mut Document) -> Result<Object> {
-        self.0.try_into_object(doc)
+    fn try_into_object(self, pdf: &mut Pdf) -> Result<Object> {
+        self.0.try_into_object(pdf)
     }
 }
 
 /// Mutation object for an [`Info`] by providing the [`crate::Pdf`] and [`InfoId`].
 pub struct InfoMut<'a> {
-    doc: &'a mut Document,
+    pdf: &'a mut Pdf,
     id: InfoId,
 }
 
 impl<'a> InfoMut<'a> {
     /// Creates the mutation object for a given [`InfoId`].
     pub fn try_new(pdf: &'a mut Pdf, id: InfoId) -> Result<Self> {
-        let doc = pdf.doc_mut();
-        dict::exists(id, doc)?;
-        Ok(Self { doc, id })
+        dict::exists(id, pdf)?;
+        Ok(Self { pdf, id })
     }
 
     /// Creates a new information dictionary.
     pub fn create(pdf: &'a mut Pdf) -> Self {
         let obj = Dictionary::new();
         let obj_id = pdf.doc_mut().add_object(obj);
-        let doc = pdf.doc_mut();
-        doc.trailer.set(Info::KEY, Object::Reference(obj_id));
+        pdf.doc_mut()
+            .trailer
+            .set(Info::KEY, Object::Reference(obj_id));
         let id = InfoId(obj_id);
-        Self { doc, id }
+        Self { pdf, id }
     }
 
     /// Gets or creates a trailer information dictionary.
@@ -453,57 +449,55 @@ impl<'a> InfoMut<'a> {
 
     /// Sets the title.
     pub fn set_title(&mut self, title: Title) -> Result<()> {
-        dict::write(title, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
-        })
+        dict::write(title, self.pdf, |pdf: &mut Pdf| dict::get_mut(self.id, pdf))
     }
 
     /// Sets the author.
     pub fn set_author(&mut self, author: Author) -> Result<()> {
-        dict::write(author, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(author, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the subject.
     pub fn set_subject(&mut self, subject: Subject) -> Result<()> {
-        dict::write(subject, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(subject, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the keywords.
     pub fn set_keywords(&mut self, keywords: Keywords) -> Result<()> {
-        dict::write(keywords, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(keywords, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the creator.
     pub fn set_creator(&mut self, creator: Creator) -> Result<()> {
-        dict::write(creator, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(creator, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the producer.
     pub fn set_producer(&mut self, producer: Producer) -> Result<()> {
-        dict::write(producer, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(producer, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the creation date.
     pub fn set_creation_date(&mut self, creation_date: CreationDate) -> Result<()> {
-        dict::write(creation_date, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(creation_date, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 
     /// Sets the mod date.
     pub fn set_mod_date(&mut self, mod_date: ModDate) -> Result<()> {
-        dict::write(mod_date, self.doc, |doc: &mut Document| {
-            dict::get_mut(self.id, doc)
+        dict::write(mod_date, self.pdf, |pdf: &mut Pdf| {
+            dict::get_mut(self.id, pdf)
         })
     }
 }

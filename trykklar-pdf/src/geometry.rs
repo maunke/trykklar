@@ -5,7 +5,7 @@ use crate::content::TryFromOperands;
 use crate::dict::DictKey;
 use crate::matrix::Matrix;
 use crate::unit::{UserSpace, UserUnit};
-use crate::{Error, Length, ObjectAsF64, PhysicalUnit, Result};
+use crate::{Error, Length, ObjectAsF64, Pdf, PhysicalUnit, Result};
 use lopdf::Object;
 use std::f64;
 use std::marker::PhantomData;
@@ -447,11 +447,11 @@ impl<U: PhysicalUnit> Rect<U> {
 
 impl TryFromObject<'_> for Rect<UserSpace> {
     fn try_from_object(
-        doc: &lopdf::Document,
+        pdf: &Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &lopdf::Object,
     ) -> Result<Self> {
-        match doc.dereference(obj)?.1 {
+        match pdf.doc().dereference(obj)?.1 {
             Object::Array(array) => {
                 // Check for 4 entries
                 let [llx, lly, urx, ury] = &array[..] else {

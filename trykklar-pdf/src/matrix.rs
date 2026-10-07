@@ -7,7 +7,7 @@ use crate::content::TryFromOperands;
 use crate::dict::DictKey;
 use crate::geometry::{Point, Rect};
 use crate::unit::UserSpace;
-use crate::{Error, Length, ObjectAsF64, Result};
+use crate::{Error, Length, ObjectAsF64, Pdf, Result};
 
 /// Represents an affine transformation matrix.
 ///
@@ -57,7 +57,7 @@ impl TryFromOperands for Matrix {
 
 impl<'a> TryFromObject<'a> for Matrix {
     fn try_from_object(
-        _doc: &'a lopdf::Document,
+        _pdf: &'a Pdf,
         _id: Option<lopdf::ObjectId>,
         obj: &'a lopdf::Object,
     ) -> Result<Self> {

@@ -11,9 +11,9 @@ use crate::ocg::Oc;
 use crate::resources::Resources;
 use crate::stream::{FilterName, StreamFilter};
 use crate::unit::UserSpace;
-use crate::{Error, Matrix, Result, object_id};
+use crate::{Error, Matrix, Pdf, Result, object_id};
 use hayro_jpeg2000::ColorSpace as JpxColorSpace;
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use lopdf::{Dictionary, Object, ObjectId, Stream};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -45,13 +45,13 @@ impl<'a> XObject<'a> {
     pub(crate) fn resolve(
         xobject_key: &[u8],
         resource_dicts: &[&'a Dictionary],
-        doc: &'a Document,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
         for d in resource_dicts {
-            if let Ok(xobject_dict_obj) = d.get_deref(b"XObject", doc) {
+            if let Ok(xobject_dict_obj) = d.get_deref(b"XObject", pdf.doc()) {
                 let xobject_dict = xobject_dict_obj.as_dict()?;
                 if let Ok(xobject_entry) = xobject_dict.get(xobject_key) {
-                    let stream_deref = doc.dereference(xobject_entry)?;
+                    let stream_deref = pdf.doc().dereference(xobject_entry)?;
                     let stream = stream_deref.1.as_stream()?;
                     let Some(stream_id) = stream_deref.0 else {
                         return Err(Error::ResourceNotFound {
@@ -61,13 +61,13 @@ impl<'a> XObject<'a> {
                     let subtype = stream.dict.get(b"Subtype")?.as_name()?;
                     return Ok(match subtype {
                         b"Form" => {
-                            XObject::Form(Arc::new(FormXObject::resolve(stream_id, stream, doc)?))
+                            XObject::Form(Arc::new(FormXObject::resolve(stream_id, stream, pdf)?))
                         }
                         b"Image" => XObject::Image(Arc::new(ImageXObject::resolve(
                             stream_id,
                             stream,
                             resource_dicts,
-                            doc,
+                            pdf,
                         )?)),
                         _ => {
                             return Err(Error::ResourceNotFound {
@@ -171,17 +171,17 @@ impl<'a> FormXObject<'a> {
         self.resources.as_field_ref()
     }
 
-    pub(crate) fn resolve(id: ObjectId, stream: &'a Stream, doc: &'a Document) -> Result<Self> {
+    pub(crate) fn resolve(id: ObjectId, stream: &'a Stream, pdf: &'a Pdf) -> Result<Self> {
         let id = FormXObjectId(id);
         let dict = &stream.dict;
-        let oc = read_optional_field_with_fn(doc, dict, |obj| Oc::resolve(obj, &[], doc));
-        let bbox = read_field(doc, dict);
-        let matrix = match read_optional_field(doc, dict) {
+        let oc = read_optional_field_with_fn(pdf, dict, |obj| Oc::resolve(obj, &[], pdf));
+        let bbox = read_field(pdf, dict);
+        let matrix = match read_optional_field(pdf, dict) {
             Some(Ok(m)) => Ok(m),
             Some(Err(e)) => Err(e),
             None => Ok(Matrix::IDENTITY),
         };
-        let resources = read_optional_field(doc, dict);
+        let resources = read_optional_field(pdf, dict);
         let content = stream.get_plain_content().map_err(Into::into);
 
         Ok(FormXObject {
@@ -240,8 +240,8 @@ impl SoftMaskImageXObject {
         self.filter.as_field_ref()
     }
 
-    fn resolve(obj: &Object, doc: &Document) -> Result<Self> {
-        let Ok((Some(id), Object::Stream(stream))) = doc.dereference(obj) else {
+    fn resolve(obj: &Object, pdf: &Pdf) -> Result<Self> {
+        let Ok((Some(id), Object::Stream(stream))) = pdf.doc().dereference(obj) else {
             return Err(Error::ResourceNotFound {
                 kind: ResourceKind::SoftMaskImage,
             });
@@ -249,17 +249,17 @@ impl SoftMaskImageXObject {
         let id = SoftMaskImageId(id);
         let dict = &stream.dict;
 
-        let width = read_field(doc, dict);
-        let height = read_field(doc, dict);
+        let width = read_field(pdf, dict);
+        let height = read_field(pdf, dict);
 
-        let filter = match read_optional_field(doc, dict) {
+        let filter = match read_optional_field(pdf, dict) {
             Some(Ok(f)) => Ok(f),
             Some(Err(e)) => Err(e.into()),
             None => Ok(StreamFilter(Vec::new())),
         };
 
         let is_mask = dict
-            .get_deref(b"ImageMask", doc)
+            .get_deref(b"ImageMask", pdf.doc())
             .and_then(Object::as_bool)
             .unwrap_or(false);
         if is_mask {
@@ -272,7 +272,7 @@ impl SoftMaskImageXObject {
         }
         match dict.get(b"ColorSpace") {
             Ok(cs) => {
-                let cs = ColorSpace::parse_object(cs, &[], doc, 0)?;
+                let cs = ColorSpace::parse_object(cs, &[], pdf, 0)?;
                 if cs != ColorSpace::DeviceGray {
                     return Err(Error::InvalidPdfObject("soft mask must be DeviceGray"));
                 }
@@ -364,20 +364,20 @@ impl ImageXObject {
         id: ObjectId,
         stream: &Stream,
         resource_dicts: &[&Dictionary],
-        doc: &Document,
+        pdf: &Pdf,
     ) -> Result<Self> {
         let id = ImageId(id);
         let dict = &stream.dict;
-        let oc = read_optional_field_with_fn(doc, dict, |obj| Oc::resolve(obj, &[], doc));
-        let width = read_field(doc, dict);
-        let height = read_field(doc, dict);
+        let oc = read_optional_field_with_fn(pdf, dict, |obj| Oc::resolve(obj, &[], pdf));
+        let width = read_field(pdf, dict);
+        let height = read_field(pdf, dict);
 
         let is_mask = dict
-            .get_deref(b"ImageMask", doc)
+            .get_deref(b"ImageMask", pdf.doc())
             .and_then(Object::as_bool)
             .unwrap_or(false);
 
-        let filter = match read_optional_field(doc, dict) {
+        let filter = match read_optional_field(pdf, dict) {
             Some(Ok(f)) => Ok(f),
             Some(Err(e)) => Err(e.into()),
             None => Ok(StreamFilter(Vec::new())),
@@ -391,7 +391,7 @@ impl ImageXObject {
             Ok(ImageKind::Mask)
         } else {
             let colorspace = match dict.get(b"ColorSpace") {
-                Ok(cs) => ColorSpace::parse_object(cs, resource_dicts, doc, 0),
+                Ok(cs) => ColorSpace::parse_object(cs, resource_dicts, pdf, 0),
                 Err(_) if let Some(ref info) = jpx_info => Ok(info.colorspace.clone()),
                 Err(_) => Err(Error::UndefinedColorSpace),
             };
@@ -401,7 +401,7 @@ impl ImageXObject {
         };
 
         let smask_obj = match dict.get(b"SMask") {
-            Ok(obj) => match doc.dereference(obj)?.1 {
+            Ok(obj) => match pdf.doc().dereference(obj)?.1 {
                 Object::Name(name) if name == b"None" => None,
                 _ => Some(obj),
             },
@@ -413,11 +413,11 @@ impl ImageXObject {
                     "image mask must not carry a soft mask",
                 ));
             }
-            (false, Some(obj)) => Some(SoftMaskImageXObject::resolve(obj, doc)?),
+            (false, Some(obj)) => Some(SoftMaskImageXObject::resolve(obj, pdf)?),
             _ => None,
         };
 
-        let bits_per_component = BitsPerComponent::resolve(doc, dict, is_mask, jpx_info);
+        let bits_per_component = BitsPerComponent::resolve(pdf, dict, is_mask, jpx_info);
 
         Ok(ImageXObject {
             id,
@@ -471,14 +471,15 @@ pub struct BitsPerComponent(u8);
 
 impl BitsPerComponent {
     fn resolve(
-        doc: &Document,
+        pdf: &Pdf,
         dict: &Dictionary,
         is_mask: bool,
         jpx_info: Option<JpxInfo>,
     ) -> Field<Self> {
         let bits_per_component = if is_mask {
             if let Ok(obj) = dict.get(b"BitsPerComponent")
-                && doc
+                && pdf
+                    .doc()
                     .dereference(obj)
                     .map_err(|_| FieldError::Missing)?
                     .1
@@ -494,7 +495,8 @@ impl BitsPerComponent {
             info.bit_depth
         } else {
             let obj = dict.get(b"BitsPerComponent")?;
-            let value = doc
+            let value = pdf
+                .doc()
                 .dereference(obj)
                 .map_err(|_| FieldError::Missing)?
                 .1
@@ -562,7 +564,7 @@ impl DictKey for ImageWidth {
 }
 
 impl TryFromObject<'_> for ImageWidth {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let val = obj.as_i64()?;
         let width = u32::try_from(val)
             .map_err(|_| Error::InvalidPdfObject("image width must be a positive integer"))?;
@@ -593,7 +595,7 @@ impl DictKey for ImageHeight {
 }
 
 impl TryFromObject<'_> for ImageHeight {
-    fn try_from_object(_doc: &'_ Document, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
         let val = obj.as_i64()?;
         let width = u32::try_from(val)
             .map_err(|_| Error::InvalidPdfObject("image height must be a positive integer"))?;

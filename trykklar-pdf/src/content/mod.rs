@@ -11,11 +11,11 @@ use crate::page::{PdfPage, PdfPageId};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;
 use crate::xobject::{FormXObject, XObject};
-use crate::{Error, Length, Matrix, Rect, Result, TilingPattern, UserUnit};
+use crate::{Error, Length, Matrix, Pdf, Rect, Result, TilingPattern, UserUnit};
 pub(crate) use cache::{ResolvedCache, WalkerCache};
 pub use context::WalkerContext;
+use lopdf::Dictionary;
 use lopdf::content::{Content, Operation};
-use lopdf::{Dictionary, Document};
 pub use operator::Operator;
 pub(crate) use operator::TryFromOperands;
 pub use state::GraphicsState;
@@ -42,7 +42,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct ContentWalker<'a> {
     page_id: PdfPageId,
-    doc: &'a Document,
+    pdf: &'a Pdf,
     context: Option<Arc<WalkerContext>>,
     cache: WalkerCache<'a>,
     resource_dicts: Vec<&'a Dictionary>,
@@ -282,20 +282,20 @@ impl<'a> ContentWalker<'a> {
     }
 
     /// Initializes the content walker from a page.
-    pub fn from_page(page: &PdfPage<'a>) -> Result<Self> {
-        let doc = page.doc();
+    pub fn from_page(page: &'a PdfPage<'a>) -> Result<Self> {
+        let pdf = page.pdf();
         let id = page.id();
         let user_unit = page.user_unit();
-        let page_resources = doc.get_page_resources(id.get())?;
+        let page_resources = pdf.doc().get_page_resources(id.get())?;
         let mut resource_dicts = Vec::new();
         if let Some(res_dict) = page_resources.0 {
             resource_dicts.push(res_dict);
         }
         for resource_id in page_resources.1 {
-            let resource_dict = doc.get_dictionary(resource_id)?;
+            let resource_dict = pdf.doc().get_dictionary(resource_id)?;
             resource_dicts.push(resource_dict);
         }
-        let content_data = doc.get_page_content(id.get());
+        let content_data = pdf.doc().get_page_content(id.get());
         let content = Content::decode_strict(&content_data)?;
         let raw_operations: Arc<Vec<_>> = content
             .operations
@@ -320,7 +320,7 @@ impl<'a> ContentWalker<'a> {
         let depth = 0;
         Ok(Self {
             page_id: id,
-            doc,
+            pdf,
             context: None,
             cache: Default::default(),
             resource_dicts,
@@ -396,7 +396,7 @@ impl<'a> ContentWalker<'a> {
         }
         Ok(Self {
             page_id: self.page_id,
-            doc: self.doc,
+            pdf: self.pdf,
             context: self.context.clone(),
             cache: Default::default(),
             resource_dicts,
@@ -466,7 +466,7 @@ impl<'a> ContentWalker<'a> {
         }
         Ok(Self {
             page_id: self.page_id,
-            doc: self.doc,
+            pdf: self.pdf,
             context: self.context.clone(),
             cache: Default::default(),
             resource_dicts,
@@ -651,7 +651,7 @@ impl<'a> ContentWalker<'a> {
         let operator = Operator::resolve(
             &raw_operation,
             &self.resource_dicts,
-            self.doc,
+            self.pdf,
             &mut self.cache,
         )?;
 
