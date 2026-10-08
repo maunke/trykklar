@@ -456,6 +456,11 @@ impl DOn {
     pub fn get(&self) -> &[Ocg] {
         &self.0
     }
+
+    /// Creates an ON object.
+    pub fn new(ocgs: Vec<Ocg>) -> Self {
+        Self(ocgs)
+    }
 }
 
 impl FromIterator<Ocg> for DOn {
@@ -507,6 +512,11 @@ impl DOff {
     /// Returns the set of [`Ocg`].
     pub fn get(&self) -> &[Ocg] {
         &self.0
+    }
+
+    /// Creates an ON object.
+    pub fn new(ocgs: Vec<Ocg>) -> Self {
+        Self(ocgs)
     }
 }
 
@@ -1296,6 +1306,33 @@ mod tests {
             .expect("exists")?
             .default_config()?;
         assert_ne!(pdf_oc_config.order()?, oc_config.order()?);
+        Ok(())
+    }
+
+    #[test]
+    fn idempotent_d_on_off_encode_decode() -> Result<()> {
+        let mut pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
+        let ocgs = pdf
+            .catalog()?
+            .oc_properties()
+            .expect("exists")?
+            .ocgs()?
+            .get()
+            .to_owned();
+        let oc_config = OcConfig::new(
+            BaseState::default(),
+            DOn::new(ocgs[..2].to_vec()),
+            DOff::new(ocgs[2..].to_vec()),
+            DOrder::default(),
+        );
+        let mut oc_props_mut = OCPropertiesMut::try_from(&mut pdf)?;
+        oc_props_mut.set_default_config(oc_config.clone())?;
+        let pdf_oc_config = pdf
+            .catalog()?
+            .oc_properties()
+            .expect("exists")?
+            .default_config()?;
+        assert_eq!(pdf_oc_config, oc_config);
         Ok(())
     }
 }
