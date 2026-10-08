@@ -9,7 +9,6 @@ use crate::error::{
 use crate::pdf::{CatalogId, Pdf};
 use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object, ObjectId, decode_text_string, text_string};
-use std::collections::HashSet;
 
 const D_ORDER_DEPTH_LIMIT: usize = 128;
 
@@ -450,11 +449,11 @@ impl TryIntoObject for OcConfig {
 /// > (Optional) An array of optional content groups whose state shall be set to ON when this
 /// > configuration is applied. If the BaseState entry is ON, this entry is redundant.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DOn(HashSet<Ocg>);
+pub struct DOn(Vec<Ocg>);
 
 impl DOn {
     /// Returns the set of [`Ocg`].
-    pub fn get(&self) -> &HashSet<Ocg> {
+    pub fn get(&self) -> &[Ocg] {
         &self.0
     }
 }
@@ -474,13 +473,13 @@ impl TryFromObject<'_> for DOn {
         let Object::Array(arr) = obj else {
             return Err(Error::InvalidPdfObject("D On must be an array"));
         };
-        let mut ocg_set = HashSet::new();
+        let mut ocgs = Vec::new();
         for element_obj in arr {
             let (ocg_id, ocg_obj) = pdf.doc().dereference(element_obj)?;
             let ocg = Ocg::try_from_object(pdf, ocg_id, ocg_obj)?;
-            ocg_set.insert(ocg);
+            ocgs.push(ocg);
         }
-        Ok(Self(ocg_set))
+        Ok(Self(ocgs))
     }
 }
 
@@ -502,11 +501,11 @@ impl TryIntoObject for DOn {
 /// > (Optional) An array of optional content groups whose state shall be set to OFF when this
 /// > configuration is applied. If the BaseState entry is OFF, this entry is redundant.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DOff(HashSet<Ocg>);
+pub struct DOff(Vec<Ocg>);
 
 impl DOff {
     /// Returns the set of [`Ocg`].
-    pub fn get(&self) -> &HashSet<Ocg> {
+    pub fn get(&self) -> &[Ocg] {
         &self.0
     }
 }
@@ -526,13 +525,13 @@ impl TryFromObject<'_> for DOff {
         let Object::Array(arr) = obj else {
             return Err(Error::InvalidPdfObject("D Off must be an array"));
         };
-        let mut ocg_set = HashSet::new();
+        let mut ocgs = Vec::new();
         for element_obj in arr {
             let (ocg_id, ocg_obj) = pdf.doc().dereference(element_obj)?;
             let ocg = Ocg::try_from_object(pdf, ocg_id, ocg_obj)?;
-            ocg_set.insert(ocg);
+            ocgs.push(ocg);
         }
-        Ok(Self(ocg_set))
+        Ok(Self(ocgs))
     }
 }
 
