@@ -690,7 +690,6 @@ fn d_order_from_array<'a>(
     pdf: &'a Pdf,
     objects: &'a [Object],
     depth: usize,
-    in_group: bool,
 ) -> Result<Vec<DOrderItem>> {
     if depth > D_ORDER_DEPTH_LIMIT {
         return Err(Error::OcPropertiesNotFound);
@@ -723,29 +722,36 @@ fn d_order_from_array<'a>(
                 buffer_ocg.take(),
             ) {
                 (_, Object::Array(arr), None, None, Some(ocg)) => {
-                    let arr_items = d_order_from_array(pdf, arr, depth + 1, true)?;
-                    items.push(
-                        OcgSubGroup {
-                            header: ocg,
-                            body: arr_items,
-                        }
-                        .into(),
-                    );
+                    let arr_items = d_order_from_array(pdf, arr, depth + 1)?;
+                    if arr.len() > 1 && arr_items.len() == 1 {
+                        items.push(ocg.into());
+                        items.extend(arr_items);
+                    } else {
+                        items.push(
+                            OcgSubGroup {
+                                header: ocg,
+                                body: arr_items,
+                            }
+                            .into(),
+                        )
+                    }
                 }
                 (_, Object::Array(arr), None, None, None) => {
-                    let arr_items = d_order_from_array(pdf, arr, depth + 1, false)?;
-                    items.extend(arr_items);
+                    let arr_items = d_order_from_array(pdf, arr, depth + 1)?;
+                    if matches!(arr_items.first(), Some(DOrderItem::OcgGroup(..))) {
+                        items.extend(arr_items);
+                    } else {
+                        items.push(
+                            OcgGroup {
+                                name: None,
+                                items: arr_items,
+                            }
+                            .into(),
+                        );
+                    }
                 }
-                (id, val, None, None, Some(ocg)) if in_group => {
+                (id, val, None, None, Some(ocg)) => {
                     items.push(ocg.into());
-                    let ocg = Ocg::try_from_object(pdf, id, val)?;
-                    buffer_ocg = Some(ocg);
-                }
-                (id, val, None, None, Some(ocg)) if !in_group && idx == 1 => {
-                    buffer_group = Some(OcgGroup {
-                        name: None,
-                        items: vec![ocg.into()],
-                    });
                     let ocg = Ocg::try_from_object(pdf, id, val)?;
                     buffer_ocg = Some(ocg);
                 }
@@ -754,6 +760,7 @@ fn d_order_from_array<'a>(
                     buffer_ocg = Some(ocg);
                 }
                 (id, val, None, Some(mut group), None) => {
+                    println!("here");
                     let ocg = Ocg::try_from_object(pdf, id, val)?;
                     group.items.push(ocg.into());
                     buffer_group = Some(group);
@@ -771,17 +778,7 @@ fn d_order_from_array<'a>(
         idx += 1;
     }
     if let Some(ocg) = buffer_ocg.take() {
-        match items.len() {
-            0 if !in_group => {
-                buffer_group = Some(OcgGroup {
-                    name: None,
-                    items: vec![ocg.into()],
-                });
-            }
-            _ => {
-                items.push(ocg.into());
-            }
-        }
+        items.push(ocg.into());
     }
     if let Some(group) = buffer_group.take() {
         items.push(group.into());
@@ -793,7 +790,7 @@ fn d_order_from_array<'a>(
 impl<'a> TryFromObject<'a> for DOrder {
     fn try_from_object(pdf: &'a Pdf, _id: Option<ObjectId>, obj: &'a Object) -> Result<Self> {
         match obj {
-            Object::Array(array) => Ok(Self(d_order_from_array(pdf, array, 0, false)?)),
+            Object::Array(array) => Ok(Self(d_order_from_array(pdf, array, 0)?)),
             _ => Err(Error::InvalidPdfObject("DOrder must be an array")),
         }
     }
@@ -1275,20 +1272,36 @@ mod tests {
             .get()
             .to_owned();
         let order = DOrder(vec![
-            OcgGroup {
-                name: Some("Group title".to_string()),
-                items: vec![ocgs[1].clone().into()],
+            OcgSubGroup {
+                header: ocgs[1].clone(),
+                body: vec![ocgs[1].clone().into(), ocgs[1].clone().into()],
+            }
+            .into(),
+            OcgSubGroup {
+                header: ocgs[1].clone(),
+                body: vec![ocgs[1].clone().into()],
             }
             .into(),
             OcgGroup {
                 name: Some("Group title".to_string()),
-                items: vec![ocgs[1].clone().into()],
+                items: vec![ocgs[1].clone().into(), ocgs[1].clone().into()],
             }
             .into(),
+            OcgGroup {
+                name: None,
+                items: vec![ocgs[1].clone().into(), ocgs[1].clone().into()],
+            }
+            .into(),
+            ocgs[1].clone().into(),
             ocgs[1].clone().into(),
             OcgGroup {
                 name: Some("Group title".to_string()),
                 items: vec![ocgs[1].clone().into()],
+            }
+            .into(),
+            OcgSubGroup {
+                header: ocgs[1].clone(),
+                body: vec![ocgs[1].clone().into()],
             }
             .into(),
             OcgGroup {
@@ -1305,7 +1318,7 @@ mod tests {
             .oc_properties()
             .expect("exists")?
             .default_config()?;
-        assert_ne!(pdf_oc_config.order()?, oc_config.order()?);
+        assert_eq!(pdf_oc_config.order()?, oc_config.order()?);
         Ok(())
     }
 
