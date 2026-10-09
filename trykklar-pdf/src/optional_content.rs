@@ -681,6 +681,12 @@ impl DOrder {
     }
 }
 
+impl FromIterator<DOrderItem> for DOrder {
+    fn from_iter<I: IntoIterator<Item = DOrderItem>>(iter: I) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl DictKey for DOrder {
     const KEY: &'static [u8] = b"Order";
 }
@@ -1271,7 +1277,7 @@ mod tests {
             .ocgs()?
             .get()
             .to_owned();
-        let order = DOrder(vec![
+        let order = DOrder::from_iter(vec![
             OcgSubGroup {
                 header: ocgs[1].clone(),
                 body: vec![ocgs[1].clone().into(), ocgs[1].clone().into()],
@@ -1334,8 +1340,8 @@ mod tests {
             .to_owned();
         let oc_config = OcConfig::new(
             BaseState::default(),
-            DOn::new(ocgs[..2].to_vec()),
-            DOff::new(ocgs[2..].to_vec()),
+            DOn::from_iter(ocgs[..2].to_vec()),
+            DOff::from_iter(ocgs[2..].to_vec()),
             DOrder::default(),
         );
         let mut oc_props_mut = OCPropertiesMut::try_from(&mut pdf)?;
