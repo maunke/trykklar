@@ -94,6 +94,22 @@ impl Pdf {
         }
     }
 
+    /// Returns the page by given [`PdfPageId`].
+    pub fn page_by_id(&self, id: PdfPageId) -> Result<PdfPage<'_>> {
+        PdfPage::new(self, id)
+    }
+
+    /// Returns the page number by given [`PdfPageId`].
+    pub fn page_number_by_id(&self, id: PdfPageId) -> Result<u32> {
+        Ok(self
+            .doc
+            .page_iter()
+            .enumerate()
+            .find(|p| p.1 == id.get())
+            .ok_or(Error::PageNotFound)?
+            .0 as u32)
+    }
+
     /// Returns the mutable page.
     pub fn page_mut(&mut self, number: u32) -> Result<PdfPageMut<'_>> {
         let lopdf_number = number.checked_add(1).ok_or(Error::PageNotFound)?;
@@ -207,6 +223,15 @@ mod tests {
         [1, 2, u32::MAX].iter().for_each(|&number| {
             assert!(matches!(pdf.page(number), Err(Error::PageNotFound)));
         });
+        Ok(())
+    }
+
+    #[test]
+    fn pdf_page_number_by_id() -> Result<()> {
+        let pdf = get_pdf();
+        let page_number = 0;
+        let page = pdf.page(page_number)?;
+        assert_eq!(pdf.page_number_by_id(page.id())?, page_number);
         Ok(())
     }
 
