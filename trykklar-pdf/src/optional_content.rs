@@ -316,6 +316,12 @@ impl OcConfig {
         }
     }
 
+    /// Creates an [`OcConfig`] with the given on entry, basestate set to [`BaseState::Off`] and the
+    /// default values for the rest.
+    pub fn new_with_on(on: DOn) -> Self {
+        Self::new(BaseState::Off, on, DOff::default(), DOrder::default())
+    }
+
     /// Returns the [`BaseState`].
     pub fn base_state(&self) -> Result<BaseState> {
         self.base_state.ok_ref().copied()
