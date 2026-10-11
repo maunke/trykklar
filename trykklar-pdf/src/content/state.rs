@@ -14,6 +14,12 @@ use crate::unit::UserSpace;
 use crate::{Error, Matrix, Result};
 
 /// Color State containing the ColorSpace and Color
+///
+/// ISO 32000-1:2008 Table 52 – Device-Independent Graphics State Parameters
+///
+/// Initial Values:
+/// - Color space: DeviceGray
+/// - Color: black = 0.0
 #[derive(Debug, Clone)]
 pub struct ColorState<'a> {
     pub color_space: Result<ColorSpace>,
@@ -24,7 +30,7 @@ impl<'a> Default for ColorState<'a> {
     fn default() -> Self {
         Self {
             color_space: Ok(ColorSpace::DeviceGray),
-            color: Ok(Color::Values([1.0].into())),
+            color: Ok(Color::Values([0.0].into())),
         }
     }
 }
