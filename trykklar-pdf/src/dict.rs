@@ -40,6 +40,22 @@ pub(crate) fn write<T: DictKey + TryIntoObject>(
     Ok(())
 }
 
+// Removes the key on `None` and writes on `Some(Ok())`.
+pub(crate) fn write_optional_field<T: DictKey + TryIntoObject>(
+    entry: OptionalField<T>,
+    pdf: &mut Pdf,
+    dict: impl FnOnce(&mut Pdf) -> Result<&mut Dictionary>,
+) -> Result<()> {
+    match entry {
+        None => remove::<T>(dict(pdf)?),
+        Some(entry) => {
+            let obj = entry?.try_into_object(pdf)?;
+            dict(pdf)?.set(T::KEY, obj);
+            Ok(())
+        }
+    }
+}
+
 pub(crate) fn remove<T: DictKey>(dict: &mut Dictionary) -> Result<()> {
     dict.remove(T::KEY);
     Ok(())
