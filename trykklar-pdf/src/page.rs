@@ -146,7 +146,7 @@ impl<'a> PdfPageMut<'a> {
     }
 
     /// Reborrow as a shared view so read methods aren't duplicated.
-    fn as_page(&self) -> Result<PdfPage<'_>> {
+    pub fn as_page(&self) -> Result<PdfPage<'_>> {
         PdfPage::new(self.pdf, self.id)
     }
 
