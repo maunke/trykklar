@@ -150,6 +150,13 @@ impl<'a> PdfPageMut<'a> {
         PdfPage::new(self.pdf, self.id)
     }
 
+    /// Sets the user unit. Attention: This can have unintended site effects, so use wisely, since
+    /// only the user unit entry is changed, not related geometries like page boxes or current
+    /// transformation matrices.
+    pub fn set_user_unit(&mut self, value: UserUnit) -> Result<()> {
+        dict::write(value, self.pdf, |pdf: &mut Pdf| dict::get_mut(self.id, pdf))
+    }
+
     /// Sets the media box.
     pub fn set_media_box<U: PhysicalUnit>(&mut self, value: MediaBox<U>) -> Result<()> {
         let uu = self.as_page()?.user_unit()?;
