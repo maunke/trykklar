@@ -11,6 +11,8 @@
 mod error;
 mod image;
 pub mod inventory;
+#[cfg(feature = "render")]
+mod render;
 mod trykklar;
 mod walker;
 
@@ -18,5 +20,7 @@ pub extern crate trykklar_pdf as pdf;
 pub use error::{Error, Result};
 pub use image::{Dpi, PaintedImage};
 pub use pdf::Pdf;
+#[cfg(feature = "render")]
+pub use render::{BackgroundColor, Pixmap, Renderer, RendererSettings};
 pub use trykklar::Trykklar;
 pub use walker::{PageWalker, WalkerProcessor};

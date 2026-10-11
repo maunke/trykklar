@@ -1,5 +1,7 @@
 //! Error and Result types
 
+#[cfg(feature = "render")]
+use hayro::hayro_syntax;
 use pdf::error::FieldError;
 use std::sync::Arc;
 
@@ -27,6 +29,13 @@ impl From<FieldError> for Error {
     }
 }
 
+#[cfg(feature = "render")]
+impl From<hayro_syntax::LoadPdfError> for Error {
+    fn from(_: hayro_syntax::LoadPdfError) -> Self {
+        Self::LoadRenderer
+    }
+}
+
 /// Error
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
@@ -39,6 +48,16 @@ pub enum Error {
     /// Value is not finite.
     #[error("non finite value")]
     NonFinite,
+    #[cfg(feature = "render")]
+    /// The document can not be loaded into the renderer engine.
+    #[error("Load Renderer error.")]
+    LoadRenderer,
+    /// Renderer could not find the page.
+    #[error("Renderer page not found.")]
+    RendererPageNotFound,
+    /// Renderer could not render into png.
+    #[error("Renderer png error.")]
+    RendererPng,
 }
 
 /// Result

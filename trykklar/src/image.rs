@@ -1,3 +1,5 @@
+//! Preflight View of an Image.
+
 use crate::{Error, Result};
 use pdf::page::PdfPageId;
 use pdf::{
@@ -75,6 +77,11 @@ pub struct Dpi {
 }
 
 impl Dpi {
+    /// Creates a new Dpi.
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+
     /// X-axis dots per inch.
     pub fn x(&self) -> f64 {
         self.x
