@@ -1,12 +1,11 @@
 //! PDF Page
-use lopdf::{Dictionary, Object, ObjectId};
-
 use crate::codec::{TryFromObject, TryIntoObject};
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
 use crate::unit::{UserSpace, UserUnit};
 use crate::{Error, ObjectAsF64, Pdf, PhysicalUnit, Result, object_id};
+use lopdf::{Dictionary, Object, ObjectId};
 
 object_id!(PdfPageId);
 
@@ -143,6 +142,19 @@ pub struct PdfPageMut<'a> {
 impl<'a> PdfPageMut<'a> {
     pub(crate) fn new(pdf: &'a mut Pdf, id: PdfPageId) -> Self {
         Self { pdf, id }
+    }
+
+    pub(crate) fn add_xobject<T: Into<ObjectId>>(&mut self, key: &str, id: T) -> Result<()> {
+        let id = id.into();
+        let doc = self.pdf.doc_mut();
+        let resources = doc.get_or_create_resources(self.id.into())?.as_dict_mut()?;
+
+        if !resources.has(b"XObject") {
+            resources.set(b"XObject", Dictionary::new());
+        }
+        let xobjects = resources.get_mut(b"XObject")?.as_dict_mut()?;
+        xobjects.set(key, Object::Reference(id));
+        Ok(())
     }
 
     /// Reborrow as a shared view so read methods aren't duplicated.
