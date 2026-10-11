@@ -190,6 +190,11 @@ impl<'a> PdfPageMut<'a> {
         dict::write(value, self.pdf, |pdf: &mut Pdf| dict::get_mut(self.id, pdf))
     }
 
+    /// Sets the rotation of the page.
+    pub fn set_rotation(&mut self, value: PageRotate) -> Result<()> {
+        dict::write(value, self.pdf, |pdf: &mut Pdf| dict::get_mut(self.id, pdf))
+    }
+
     /// Sets the media box.
     pub fn set_media_box<U: PhysicalUnit>(&mut self, value: MediaBox<U>) -> Result<()> {
         let uu = self.as_page()?.user_unit()?;
@@ -318,6 +323,18 @@ impl TryFrom<f64> for PageRotate {
             }
         };
         Ok(value)
+    }
+}
+
+impl TryIntoObject for PageRotate {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
+        let value = match self {
+            Self::R0 => 0,
+            Self::R90 => 90,
+            Self::R180 => 180,
+            Self::R270 => 270,
+        };
+        Ok(Object::Integer(value))
     }
 }
 
@@ -669,6 +686,16 @@ mod tests {
         // default value
         let pdf = get_pdf(None);
         assert_eq!(pdf.page(0)?.rotation()?, PageRotate::default());
+        Ok(())
+    }
+
+    #[test]
+    fn set_page_rotation() -> Result<()> {
+        let mut pdf = get_pdf(None);
+        let mut page = pdf.page_mut(0)?;
+        let page_rotate = PageRotate::R270;
+        page.set_rotation(page_rotate)?;
+        assert_eq!(page_rotate, page.as_page()?.rotation()?);
         Ok(())
     }
 }
