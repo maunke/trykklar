@@ -145,6 +145,11 @@ impl<U> Sub for Length<U> {
 pub struct UserUnit(pub(crate) f64);
 
 impl UserUnit {
+    /// Creates a user unit.
+    pub fn new(value: f64) -> Self {
+        Self(value)
+    }
+
     /// Returns the raw value.
     #[inline]
     #[must_use]
