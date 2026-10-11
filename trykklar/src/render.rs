@@ -6,7 +6,7 @@ use hayro::{PixmapSettings, RenderCache, RenderSettings, hayro_syntax, render};
 use pdf::content::raw_operator::{ModifyCtm, Operations, PaintXObject};
 use pdf::geometry::{Point, Size};
 use pdf::optional_content::OCPropertiesMut;
-use pdf::page::{CropBox, MediaBox};
+use pdf::page::{CropBox, MediaBox, PageRotate};
 use pdf::xobject::ImageXObjectMut;
 use pdf::{Inch, OcConfig, Pdf, Rect, UserUnit};
 use std::num::NonZeroU32;
@@ -225,6 +225,7 @@ impl Renderer {
         let number = pdf.page_number_by_id(page_id)?;
         let mut page = pdf.page_mut(number)?;
 
+        page.set_rotation(PageRotate::R0)?;
         page.set_user_unit(UserUnit::new(1.0))?;
 
         let width = u32::from(image.xobject().width()?.get()) as f64;
