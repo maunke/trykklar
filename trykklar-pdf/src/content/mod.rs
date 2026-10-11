@@ -2,6 +2,7 @@
 mod cache;
 mod context;
 mod operator;
+pub mod raw_operator;
 mod state;
 use crate::error::ResultExt;
 use crate::font::{CMapEncoding, FontKind};

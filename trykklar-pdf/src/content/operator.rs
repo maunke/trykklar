@@ -1,7 +1,9 @@
-//! Content Stream Operator
+//! Content Stream Operator as resolved view. Use [`crate::content::raw_operator::RawOperator`] to
+//! write into the content stream a new operator.
 
 use crate::codec::TryFromObject;
 use crate::color::{Color, ColorSpace, PatternColor};
+use crate::content::raw_operator::{ModifyCtm, OperatorName, PaintXObject};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
 use crate::extgstate::{ExtGState, LineWidth};
@@ -21,6 +23,9 @@ use crate::{Error, Matrix, Pdf, Rect, Result};
 use lopdf::{Dictionary, Object};
 
 /// Content Stream Operator
+///
+/// This is parsed from the content stream. In order to write an operator to content stream look at
+/// [`crate::content::raw_operator`].
 ///
 /// ISO 32000-1:2008 Table A.1 – PDF content stream operators
 #[derive(Debug, Clone)]
@@ -137,7 +142,7 @@ impl<'a> Operator<'a> {
     ) -> Result<Self> {
         let operands = &operation.operands;
         let op = match operation.operator.as_str() {
-            "Do" => Self::PaintXObject(match &operands[..] {
+            PaintXObject::OPERATOR => Self::PaintXObject(match &operands[..] {
                 [Object::Name(xobject_key)] => cache.xobject.get_or_resolve(xobject_key, || {
                     XObject::resolve(xobject_key, resource_dicts, pdf)
                 }),
@@ -146,7 +151,7 @@ impl<'a> Operator<'a> {
             // 8.4.4 Graphics State Operators
             "q" => Self::SaveGraphicsState,
             "Q" => Self::RestoreGraphicsState,
-            "cm" => {
+            ModifyCtm::OPERATOR => {
                 let matrix = Matrix::try_from_operands(operands);
                 Self::ModifyCtm(matrix)
             }
