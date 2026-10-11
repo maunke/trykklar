@@ -40,6 +40,11 @@ pub(crate) fn write<T: DictKey + TryIntoObject>(
     Ok(())
 }
 
+pub(crate) fn remove<T: DictKey>(dict: &mut Dictionary) -> Result<()> {
+    dict.remove(T::KEY);
+    Ok(())
+}
+
 pub(crate) fn exists<T: Into<ObjectId>>(id: T, pdf: &Pdf) -> Result<()> {
     Ok(pdf.doc().get_dictionary(id.into()).map(|_| ())?)
 }
