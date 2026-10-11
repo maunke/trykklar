@@ -1,10 +1,12 @@
 //! PDF Page
 use crate::codec::{TryFromObject, TryIntoObject};
+use crate::content::raw_operator::Operations;
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
 use crate::unit::{UserSpace, UserUnit};
 use crate::{Error, ObjectAsF64, Pdf, PhysicalUnit, Result, object_id};
+use lopdf::content::Content;
 use lopdf::{Dictionary, Object, ObjectId};
 
 object_id!(PdfPageId);
@@ -160,6 +162,20 @@ impl<'a> PdfPageMut<'a> {
     /// Returns the page id.
     pub fn id(&self) -> PdfPageId {
         self.id
+    }
+
+    /// Sets the content with given operations.
+    pub fn set_content(&mut self, operations: Operations) -> Result<()> {
+        let content = Content {
+            operations: operations
+                .iter()
+                .map(|op| op.try_into_operation(self))
+                .collect::<Result<Vec<_>>>()?,
+        };
+        self.pdf
+            .doc_mut()
+            .change_page_content(self.id.into(), content.encode()?)?;
+        Ok(())
     }
 
     /// Reborrow as a shared view so read methods aren't duplicated.
