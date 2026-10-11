@@ -1,7 +1,7 @@
 //! External Objects
 use crate::codec::TryFromObject;
 use crate::color::{ColorSpace, IccBased};
-use crate::dict::{DictKey, read_field, read_optional_field, read_optional_field_with_fn};
+use crate::dict::{self, DictKey, read_field, read_optional_field, read_optional_field_with_fn};
 use crate::error::{
     Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
     ResultExtDeref,
@@ -429,6 +429,34 @@ impl ImageXObject {
             bits_per_component,
             soft_mask,
         })
+    }
+}
+
+/// Mutable Image XObject
+pub struct ImageXObjectMut<'a> {
+    pdf: &'a mut Pdf,
+    id: ImageId,
+}
+
+impl<'a> ImageXObjectMut<'a> {
+    /// Creates the mutation object for a given [`ImageId`].
+    pub fn try_new(pdf: &'a mut Pdf, id: ImageId) -> Result<Self> {
+        pdf.doc().get_object(id.into())?.as_stream()?;
+        Ok(Self { pdf, id })
+    }
+
+    fn dict_mut(&mut self) -> Result<&mut Dictionary> {
+        Ok(&mut self
+            .pdf
+            .doc_mut()
+            .get_object_mut(self.id.into())?
+            .as_stream_mut()?
+            .dict)
+    }
+
+    /// Removes the [`Oc`] entry.
+    pub fn remove_oc(&mut self) -> Result<()> {
+        dict::remove::<Oc>(self.dict_mut()?)
     }
 }
 
