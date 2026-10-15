@@ -4,6 +4,7 @@ mod context;
 mod operator;
 pub mod raw_operator;
 mod state;
+use crate::content::raw_operator::TryIntoOperation;
 use crate::error::ResultExt;
 use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
@@ -20,6 +21,7 @@ use lopdf::content::{Content, Operation};
 pub use operator::Operator;
 pub(crate) use operator::TryFromOperands;
 pub use state::GraphicsState;
+use std::ops::Deref;
 use std::sync::Arc;
 
 /// Content Walker
@@ -108,6 +110,12 @@ pub struct ContentWalkerStep<'a> {
     oc_levels: Vec<Result<Oc>>,
     tiled_region: Option<Result<BBox<UserSpace>>>,
     user_unit: Result<UserUnit>,
+}
+
+impl<'a> TryIntoOperation for ContentWalkerStep<'a> {
+    fn try_into_operation(&self, _page: &mut crate::page::PdfPageMut) -> Result<Operation> {
+        Ok(self.raw_operation.deref().clone())
+    }
 }
 
 impl<'a> ContentWalkerStep<'a> {
