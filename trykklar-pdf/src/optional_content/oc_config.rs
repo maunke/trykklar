@@ -660,7 +660,6 @@ fn d_order_from_array<'a>(
                     buffer_ocg = Some(ocg);
                 }
                 (id, val, None, Some(mut group), None) => {
-                    println!("here");
                     let ocg = Ocg::try_from_object(pdf, id, val)?;
                     group.items.push(ocg.into());
                     buffer_group = Some(group);
