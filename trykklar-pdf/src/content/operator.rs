@@ -3,7 +3,7 @@
 
 use crate::codec::TryFromObject;
 use crate::color::{Color, ColorSpace, PatternColor};
-use crate::content::raw_operator::{ModifyCtm, OperatorName, PaintXObject};
+use crate::content::write_operator::{ModifyCtm, OperatorName, PaintXObject};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
 use crate::extgstate::{ExtGState, LineWidth};

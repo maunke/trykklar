@@ -3,7 +3,7 @@ use crate::{Dpi, Error, PaintedImage, Result};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::Rgba8;
 use hayro::{PixmapSettings, RenderCache, RenderSettings, hayro_syntax, render};
-use pdf::content::raw_operator::{ModifyCtm, Operations, PaintXObject};
+use pdf::content::write_operator::{ModifyCtm, PaintXObject, WriteOperation, WriteOperations};
 use pdf::geometry::{Point, Size};
 use pdf::optional_content::OCPropertiesMut;
 use pdf::page::{CropBox, MediaBox, PageRotate};
@@ -250,7 +250,10 @@ impl Renderer {
             e: 0.,
             f: 0.,
         });
-        let operations: Operations = vec![Box::new(modify_ctm), Box::new(paint_xobject)];
+        let operations: WriteOperations = vec![
+            WriteOperation::new(modify_ctm),
+            WriteOperation::new(paint_xobject),
+        ];
         page.set_content(operations)?;
 
         let user_unit = page.as_page()?.user_unit()?;

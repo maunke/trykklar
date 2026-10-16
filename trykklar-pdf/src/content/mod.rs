@@ -2,9 +2,9 @@
 mod cache;
 mod context;
 mod operator;
-pub mod raw_operator;
 mod state;
-use crate::content::raw_operator::TryIntoOperation;
+pub mod write_operator;
+use crate::content::write_operator::{TryIntoOperation, WriteOperation};
 use crate::error::ResultExt;
 use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
@@ -110,6 +110,12 @@ pub struct ContentWalkerStep<'a> {
     oc_levels: Vec<Result<Oc>>,
     tiled_region: Option<Result<BBox<UserSpace>>>,
     user_unit: Result<UserUnit>,
+}
+
+impl<'a> From<ContentWalkerStep<'a>> for WriteOperation {
+    fn from(value: ContentWalkerStep<'a>) -> Self {
+        Self::Raw(value.raw_operation.clone())
+    }
 }
 
 impl<'a> TryIntoOperation for ContentWalkerStep<'a> {

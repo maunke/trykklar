@@ -6,9 +6,34 @@ use crate::page::PdfPageMut;
 use crate::{ImageId, Matrix, Pdf, Result};
 use lopdf::content::Operation;
 use lopdf::{Object, ObjectId};
+use std::sync::Arc;
 
 /// Operations
-pub type Operations = Vec<Box<dyn TryIntoOperation>>;
+pub type WriteOperations<'a> = Vec<WriteOperation>;
+
+/// A Write Operation from a present raw or a new operation
+pub enum WriteOperation {
+    /// A new operation
+    New(Box<dyn TryIntoOperation>),
+    /// Present operation read from a walker
+    Raw(Arc<Operation>),
+}
+
+impl WriteOperation {
+    /// Creates a [`Self::New`] write operation.
+    pub fn new(value: impl TryIntoOperation + 'static) -> Self {
+        Self::New(Box::new(value))
+    }
+
+    // This conversion consumes self in order to allow the raw operator to move into the operator if
+    // the refcount is 1.
+    pub(crate) fn try_into_operation(self, page: &mut PdfPageMut) -> Result<Operation> {
+        match self {
+            Self::New(op) => op.try_into_operation(page),
+            Self::Raw(op) => Ok(Arc::unwrap_or_clone(op)),
+        }
+    }
+}
 
 /// Converts to an operation.
 pub trait TryIntoOperation {

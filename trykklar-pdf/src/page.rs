@@ -1,6 +1,6 @@
 //! PDF Page
 use crate::codec::{TryFromObject, TryIntoObject};
-use crate::content::raw_operator::Operations;
+use crate::content::write_operator::WriteOperations;
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
@@ -165,10 +165,10 @@ impl<'a> PdfPageMut<'a> {
     }
 
     /// Sets the content with given operations.
-    pub fn set_content(&mut self, operations: Operations) -> Result<()> {
+    pub fn set_content(&mut self, operations: WriteOperations) -> Result<()> {
         let content = Content {
             operations: operations
-                .iter()
+                .into_iter()
                 .map(|op| op.try_into_operation(self))
                 .collect::<Result<Vec<_>>>()?,
         };
