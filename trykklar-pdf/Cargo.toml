@@ -16,3 +16,6 @@ lopdf = { workspace = true }
 md5 = "0.8.1"
 thiserror = { workspace = true }
 time = { workspace = true, features = ["formatting", "parsing", "macros"] }
+
+[lints]
+workspace = true

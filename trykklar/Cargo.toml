@@ -20,3 +20,6 @@ trykklar-pdf = { workspace = true }
 default = ["render"]
 render = ["hayro"]
 wasm = ["lopdf/wasm_js"]
+
+[lints]
+workspace = true

@@ -21,6 +21,10 @@ time = { version = "0.3.55", default-features = false }
 trykklar = { path = "trykklar", version = "0.1.1" }
 trykklar-pdf = { path = "trykklar-pdf", version = "0.1.1" }
 
+[workspace.lints.clippy]
+print_stdout = "forbid"
+print_stderr = "forbid"
+
 # Used for xtask tooling
 [profile.light]
 inherits = "dev"
