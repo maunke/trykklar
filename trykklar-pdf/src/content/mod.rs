@@ -91,6 +91,11 @@ impl<'a> ContentWalker<'a> {
     fn path_bbox(&self) -> Result<BBox<UserSpace>> {
         compute_current_path_bbox(&self.current_path)
     }
+
+    /// Returns the depth of the walker.
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
 }
 
 /// Content Walker Step
