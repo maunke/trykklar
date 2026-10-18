@@ -222,11 +222,9 @@ pub struct OcgMut<'a> {
 
 impl<'a> OcgMut<'a> {
     /// Creates the mutation object for a given [`OcgId`].
-    pub fn try_new(pdf: &'a mut Pdf, id: OcgId) -> Result<Self> {
+    pub fn new(pdf: &'a mut Pdf, id: OcgId) -> Self {
         let doc = pdf.doc_mut();
-        let mut ocg_mut = Self { doc, id };
-        ocg_mut.dict_mut()?;
-        Ok(ocg_mut)
+        Self { doc, id }
     }
 
     fn dict_mut(&mut self) -> Result<&mut Dictionary> {
@@ -569,7 +567,7 @@ mod tests {
             .iter()
             .zip(new_names.iter())
         {
-            let mut ocg_mut = OcgMut::try_new(&mut pdf, ocg.id())?;
+            let mut ocg_mut = OcgMut::new(&mut pdf, ocg.id());
             ocg_mut.set_name(new_name)?;
         }
 

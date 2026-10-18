@@ -61,10 +61,6 @@ pub(crate) fn remove<T: DictKey>(dict: &mut Dictionary) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn exists<T: Into<ObjectId>>(id: T, pdf: &Pdf) -> Result<()> {
-    Ok(pdf.doc().get_dictionary(id.into()).map(|_| ())?)
-}
-
 pub(crate) fn get_mut<T: Into<ObjectId>>(id: T, pdf: &mut Pdf) -> Result<&mut Dictionary> {
     Ok(pdf.doc_mut().get_dictionary_mut(id.into())?)
 }
