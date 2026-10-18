@@ -9,6 +9,7 @@ use crate::error::{
     Field, FieldError, FieldExtDeref, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
 };
 use crate::pdf::{CatalogId, Pdf};
+use crate::resources::ContentResources;
 use crate::{Error, Result, object_id};
 use lopdf::{Dictionary, Document, Object, ObjectId, decode_text_string, text_string};
 pub use oc_config::{BaseState, DOff, DOn, DOrder, DOrderItem, OcConfig, OcgGroup, OcgSubGroup};
@@ -338,12 +339,12 @@ impl DictKey for Oc {
 impl Oc {
     pub(crate) fn resolve(
         properties: &Object,
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
     ) -> Result<Self> {
         let (id, dict) = match properties {
             Object::Name(name) => {
-                for rd in resource_dicts {
+                for rd in content_resources.resource_dictionaries() {
                     if let Ok(Object::Dictionary(props)) = rd.get_deref(b"Properties", pdf.doc())
                         && let Ok(entry) = props.get(name)
                     {

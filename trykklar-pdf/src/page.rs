@@ -4,6 +4,7 @@ use crate::content::write_operator::WriteOperations;
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
+use crate::resources::PageResources;
 use crate::unit::{UserSpace, UserUnit};
 use crate::{Error, ObjectAsF64, Pdf, PhysicalUnit, Result, object_id};
 use lopdf::content::Content;
@@ -132,6 +133,11 @@ impl<'a> PdfPage<'a> {
                 Ok(ArtBox(rect))
             }
         }
+    }
+
+    /// Returns the resources, chained by Parent keys
+    pub fn resources(&'a self) -> Result<PageResources<'a>> {
+        PageResources::try_from(self)
     }
 }
 

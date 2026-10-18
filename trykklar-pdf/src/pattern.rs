@@ -6,7 +6,7 @@ use crate::error::{
     Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
     ResultExtDeref,
 };
-use crate::resources::Resources;
+use crate::resources::{ContentResources, Resources};
 use crate::unit::UserSpace;
 use crate::{ColorSpace, Error, Matrix, Pdf, Rect, Result, object_id};
 use lopdf::{Dictionary, Object, ObjectId, Stream};
@@ -35,10 +35,10 @@ pub enum Pattern<'a> {
 impl<'a> Pattern<'a> {
     pub(crate) fn resolve(
         pattern_key: &[u8],
-        resource_dicts: &[&'a Dictionary],
+        content_resources: &ContentResources<'a>,
         pdf: &'a Pdf,
     ) -> Result<Self> {
-        for d in resource_dicts {
+        for d in content_resources.resource_dictionaries() {
             if let Ok(pattern_dict_obj) = d.get_deref(b"Pattern", pdf.doc()) {
                 let pattern_dict = pattern_dict_obj.as_dict()?;
                 if let Ok(pattern_obj_ref) = pattern_dict.get(pattern_key) {
@@ -60,7 +60,7 @@ impl<'a> Pattern<'a> {
                             return Ok(Pattern::Shading(Arc::new(ShadingPattern::resolve(
                                 obj_id,
                                 shading_dict,
-                                resource_dicts,
+                                content_resources,
                                 pdf,
                             )?)));
                         }
@@ -236,7 +236,7 @@ pub struct ShadingPattern {
     pub(crate) matrix: Field<Matrix>,
 }
 
-impl<'a> ShadingPattern {
+impl ShadingPattern {
     /// Returns the ID of the shading pattern object.
     pub fn id(&self) -> ShadingPatternId {
         self.id
@@ -262,7 +262,7 @@ impl<'a> ShadingPattern {
     fn resolve(
         id: ObjectId,
         dict: &Dictionary,
-        resource_dicts: &[&'a Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
     ) -> Result<Self> {
         let id = ShadingPatternId(id);
@@ -271,8 +271,9 @@ impl<'a> ShadingPattern {
             Some(Err(e)) => Err(e.into()),
             None => Ok(Matrix::IDENTITY),
         };
-        let shading =
-            read_field_with_fn(pdf, dict, |obj| Shading::resolve(obj, resource_dicts, pdf));
+        let shading = read_field_with_fn(pdf, dict, |obj| {
+            Shading::resolve(obj, content_resources, pdf)
+        });
 
         Ok(Self {
             id,
@@ -295,7 +296,7 @@ impl DictKey for Shading {
     const KEY: &'static [u8] = b"Shading";
 }
 
-impl<'a> Shading {
+impl Shading {
     /// Returns the shading color space.
     ///
     /// > (Required) The colour space in which colour values shall be expressed. This may be any
@@ -318,7 +319,7 @@ impl<'a> Shading {
 
     pub(crate) fn resolve(
         obj: &Object,
-        resource_dicts: &[&'a Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
     ) -> Result<Self> {
         let obj = pdf.doc().dereference(obj)?;
@@ -328,7 +329,7 @@ impl<'a> Shading {
             _ => return Err(Error::InvalidPdfObject("Shading must be a dict or stream")),
         };
         let color_space = match read_field_with_fn(pdf, dict, |obj| {
-            ColorSpace::parse_object(obj, resource_dicts, pdf, 0)
+            ColorSpace::parse_object(obj, content_resources, pdf, 0)
         }) {
             // As in the spec defined, Pattern colorspace is not allowed.
             Ok(ColorSpace::Pattern(_)) => {

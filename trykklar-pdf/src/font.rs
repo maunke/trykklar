@@ -3,9 +3,10 @@ use crate::codec::{ObjectAsF64, TryFromObject, deref_f64};
 use crate::content::TryFromOperands;
 use crate::dict::{DictKey, read_field, read_optional_field};
 use crate::error::{Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResultExt};
+use crate::resources::ContentResources;
 use crate::unit::UserSpace;
 use crate::{Error, Matrix, Pdf, Rect, Result, object_id};
-use lopdf::{Dictionary, Object, ObjectId};
+use lopdf::{Object, ObjectId};
 use std::sync::Arc;
 
 object_id!(FontId);
@@ -31,12 +32,12 @@ impl TryFromObject<'_> for Font {
 }
 
 impl Font {
-    pub(crate) fn resolve<'a>(
+    pub(crate) fn resolve(
         font_key: &[u8],
-        resource_dicts: &[&'a Dictionary],
-        pdf: &'a Pdf,
+        content_resources: &ContentResources,
+        pdf: &Pdf,
     ) -> Result<Self> {
-        let font_kind = FontKind::resolve(font_key, resource_dicts, pdf)?;
+        let font_kind = FontKind::resolve(font_key, content_resources, pdf)?;
         Ok(Self(Arc::new(font_kind)))
     }
 }
@@ -157,12 +158,8 @@ impl FontKind {
         }
     }
 
-    fn resolve<'a>(
-        font_key: &[u8],
-        resource_dicts: &[&'a Dictionary],
-        pdf: &'a Pdf,
-    ) -> Result<Self> {
-        for d in resource_dicts {
+    fn resolve(font_key: &[u8], content_resources: &ContentResources, pdf: &Pdf) -> Result<Self> {
+        for d in content_resources.resource_dictionaries() {
             let Ok(font_subdict) = d.get_deref(b"Font", pdf.doc()) else {
                 continue;
             };

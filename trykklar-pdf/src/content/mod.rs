@@ -10,13 +10,13 @@ use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
 use crate::optional_content::Oc;
 use crate::page::{PdfPage, PdfPageId};
+use crate::resources::{ContentResources, PageResources};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;
 use crate::xobject::{FormXObject, XObject};
 use crate::{Error, Length, Matrix, Pdf, Rect, Result, TilingPattern, UserUnit};
 pub(crate) use cache::{ResolvedCache, WalkerCache};
 pub use context::WalkerContext;
-use lopdf::Dictionary;
 use lopdf::content::{Content, Operation};
 pub use operator::Operator;
 pub(crate) use operator::TryFromOperands;
@@ -48,7 +48,8 @@ pub struct ContentWalker<'a> {
     pdf: &'a Pdf,
     context: Option<Arc<WalkerContext>>,
     cache: WalkerCache<'a>,
-    resource_dicts: Vec<&'a Dictionary>,
+    page_resources: PageResources<'a>,
+    content_resources: ContentResources<'a>,
     raw_operations: Arc<Vec<Arc<Operation>>>,
     step: usize,
     graphics_state: GraphicsState<'a>,
@@ -301,15 +302,8 @@ impl<'a> ContentWalker<'a> {
         let pdf = page.pdf();
         let id = page.id();
         let user_unit = page.user_unit();
-        let page_resources = pdf.doc().get_page_resources(id.get())?;
-        let mut resource_dicts = Vec::new();
-        if let Some(res_dict) = page_resources.0 {
-            resource_dicts.push(res_dict);
-        }
-        for resource_id in page_resources.1 {
-            let resource_dict = pdf.doc().get_dictionary(resource_id)?;
-            resource_dicts.push(resource_dict);
-        }
+        let page_resources = page.resources()?;
+        let content_resources = ContentResources::Page(page_resources.clone());
         let content_data = pdf.doc().get_page_content(id.get());
         let content = Content::decode_strict(&content_data)?;
         let raw_operations: Arc<Vec<_>> = content
@@ -338,7 +332,8 @@ impl<'a> ContentWalker<'a> {
             pdf,
             context: None,
             cache: Default::default(),
-            resource_dicts,
+            page_resources,
+            content_resources,
             raw_operations,
             step,
             graphics_state,
@@ -358,13 +353,12 @@ impl<'a> ContentWalker<'a> {
     }
 
     /// Initializes the content walker from a form xobject.
-    pub fn from_form_xobject(&self, form: &'a FormXObject<'a>) -> Result<Self> {
-        let mut resource_dicts = Vec::new();
-        if let Some(form_resources_result) = form.resources() {
-            let form_resources = form_resources_result.ok_ref()?;
-            resource_dicts.push(form_resources.get());
+    pub fn from_form_xobject(&'a self, form: &'a FormXObject<'a>) -> Result<Self> {
+        let content_resources = match form.resources() {
+            None => ContentResources::Page(self.page_resources.clone()),
+            Some(Ok(resources)) => ContentResources::Local(*resources),
+            Some(Err(e)) => return Err(e.clone()),
         };
-        resource_dicts.extend_from_slice(&self.resource_dicts);
         let form_content = form.content()?;
         let content = Content::decode_strict(form_content)?;
         let raw_operations: Arc<Vec<_>> = content
@@ -414,7 +408,8 @@ impl<'a> ContentWalker<'a> {
             pdf: self.pdf,
             context: self.context.clone(),
             cache: Default::default(),
-            resource_dicts,
+            page_resources: self.page_resources.clone(),
+            content_resources,
             raw_operations,
             step: 0,
             base_ctm: graphics_state.ctm.clone(),
@@ -438,13 +433,10 @@ impl<'a> ContentWalker<'a> {
     /// The `region` represents the painted bounding box, where the tiling pattern is applied to.
     pub fn from_tiling_pattern(
         &self,
-        tiling_pattern: &TilingPattern<'a>,
+        tiling_pattern: &'a TilingPattern<'a>,
         region: Result<BBox<UserSpace>>,
     ) -> Result<Self> {
-        let mut resource_dicts = Vec::new();
-        let tiling_pattern_resources = tiling_pattern.resources.ok_ref()?;
-        resource_dicts.push(tiling_pattern_resources.get());
-        resource_dicts.extend_from_slice(&self.resource_dicts);
+        let content_resources = ContentResources::Local(*tiling_pattern.resources()?);
         let tiling_pattern_content = tiling_pattern.content.ok_ref()?;
         let content = Content::decode_strict(tiling_pattern_content)?;
         let raw_operations: Arc<Vec<_>> = content
@@ -484,7 +476,8 @@ impl<'a> ContentWalker<'a> {
             pdf: self.pdf,
             context: self.context.clone(),
             cache: Default::default(),
-            resource_dicts,
+            page_resources: self.page_resources.clone(),
+            content_resources,
             raw_operations,
             step: 0,
             base_ctm: graphics_state.ctm.clone(),
@@ -665,7 +658,7 @@ impl<'a> ContentWalker<'a> {
 
         let operator = Operator::resolve(
             &raw_operation,
-            &self.resource_dicts,
+            &self.content_resources,
             self.pdf,
             &mut self.cache,
         )?;

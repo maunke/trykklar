@@ -3,8 +3,9 @@ use crate::codec::{TryFromObject, deref_array, deref_name};
 use crate::content::ResolvedCache;
 use crate::dict::{DictKey, read_field};
 use crate::error::{Field, FieldExt, ResultExt};
+use crate::resources::ContentResources;
 use crate::{Error, ImageId, Pdf, Result, ShadingPattern, TilingPattern};
-use lopdf::{Dictionary, Object, ObjectId};
+use lopdf::{Object, ObjectId};
 use std::hash::Hash;
 use std::sync::Arc;
 
@@ -505,13 +506,13 @@ impl Indexed {
 impl ColorSpace {
     pub(crate) fn resolve(
         value: &lopdf::content::Operation,
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
         cache: &mut ResolvedCache<Self>,
     ) -> Result<Self> {
         let lopdf::content::Operation { operator, operands } = value;
         let color_space = match operator.as_str() {
-            "CS" | "cs" => Self::parse_cs(operands, resource_dicts, pdf, cache)?,
+            "CS" | "cs" => Self::parse_cs(operands, content_resources, pdf, cache)?,
             "G" | "g" => Self::DeviceGray,
             "RG" | "rg" => Self::DeviceRgb,
             "K" | "k" => Self::DeviceCmyk,
@@ -522,21 +523,21 @@ impl ColorSpace {
 
     pub(crate) fn parse_cs(
         operands: &[Object],
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
         cache: &mut ResolvedCache<Self>,
     ) -> Result<Self> {
         let [Object::Name(name)] = operands else {
             return Err(Error::InvalidOperands);
         };
-        cache.get_or_resolve(name, || Self::parse_name(name, resource_dicts, pdf, 0))
+        cache.get_or_resolve(name, || Self::parse_name(name, content_resources, pdf, 0))
     }
 
     const MAX_CYCLES: usize = 128;
 
     fn parse_name(
         name: &[u8],
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
         cycle_count: usize,
     ) -> Result<Self> {
@@ -550,12 +551,12 @@ impl ColorSpace {
             b"DeviceCMYK" => Self::DeviceCmyk,
             b"Pattern" => Self::Pattern(None),
             key_name => {
-                for d in resource_dicts {
+                for d in content_resources.resource_dictionaries() {
                     if let Ok((_, Object::Dictionary(cs_dict))) =
                         d.get(b"ColorSpace").and_then(|o| pdf.doc().dereference(o))
                         && let Ok(cs_obj) = cs_dict.get(key_name)
                     {
-                        return Self::parse_object(cs_obj, resource_dicts, pdf, cycle_count);
+                        return Self::parse_object(cs_obj, content_resources, pdf, cycle_count);
                     }
                 }
                 return Err(Error::UndefinedColorSpace);
@@ -566,7 +567,7 @@ impl ColorSpace {
 
     pub(crate) fn parse_object(
         obj: &Object,
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
         cycle_count: usize,
     ) -> Result<Self> {
@@ -576,7 +577,7 @@ impl ColorSpace {
         }
         let (_, obj) = pdf.doc().dereference(obj)?;
         match obj {
-            Object::Name(name) => Self::parse_name(name, resource_dicts, pdf, cycle_count),
+            Object::Name(name) => Self::parse_name(name, content_resources, pdf, cycle_count),
             Object::Array(arr) => {
                 let Some(Object::Name(cs_name)) = arr.first() else {
                     return Err(Error::InvalidColorSpace);
@@ -595,13 +596,14 @@ impl ColorSpace {
                         let [_, ref base_obj, ref _hival, ref _lookup] = arr[..] else {
                             return Err(Error::InvalidColorSpace);
                         };
-                        let base = Self::parse_object(base_obj, resource_dicts, pdf, cycle_count)?;
+                        let base =
+                            Self::parse_object(base_obj, content_resources, pdf, cycle_count)?;
                         Self::Indexed(Indexed { base }.into())
                     }
                     b"Pattern" => match arr.get(1) {
                         Some(base_obj) => {
                             let base =
-                                Self::parse_object(base_obj, resource_dicts, pdf, cycle_count)?;
+                                Self::parse_object(base_obj, content_resources, pdf, cycle_count)?;
                             if matches!(base, Self::Pattern(..)) {
                                 return Err(Error::InvalidColorSpaceNestedPattern);
                             }
@@ -624,7 +626,7 @@ impl ColorSpace {
                         };
                         let alternate = Self::parse_object(
                             arr.get(2).ok_or(Error::InvalidColorSpace)?,
-                            resource_dicts,
+                            content_resources,
                             pdf,
                             cycle_count,
                         )?;
@@ -655,7 +657,7 @@ impl ColorSpace {
                         }
                         let alternate = Self::parse_object(
                             arr.get(2).ok_or(Error::InvalidColorSpace)?,
-                            resource_dicts,
+                            content_resources,
                             pdf,
                             cycle_count,
                         )?;

@@ -8,7 +8,7 @@ use crate::error::{
 };
 use crate::geometry::Rect;
 use crate::optional_content::Oc;
-use crate::resources::Resources;
+use crate::resources::{ContentResources, Resources};
 use crate::stream::{FilterName, StreamFilter};
 use crate::unit::UserSpace;
 use crate::{Error, Matrix, Pdf, Result, object_id};
@@ -44,10 +44,10 @@ pub enum XObject<'a> {
 impl<'a> XObject<'a> {
     pub(crate) fn resolve(
         xobject_key: &[u8],
-        resource_dicts: &[&'a Dictionary],
+        content_resources: &ContentResources<'a>,
         pdf: &'a Pdf,
     ) -> Result<Self> {
-        for d in resource_dicts {
+        for d in content_resources.resource_dictionaries() {
             if let Ok(xobject_dict_obj) = d.get_deref(b"XObject", pdf.doc()) {
                 let xobject_dict = xobject_dict_obj.as_dict()?;
                 if let Ok(xobject_entry) = xobject_dict.get(xobject_key) {
@@ -66,7 +66,7 @@ impl<'a> XObject<'a> {
                         b"Image" => XObject::Image(Arc::new(ImageXObject::resolve(
                             stream_id,
                             stream,
-                            resource_dicts,
+                            content_resources,
                             pdf,
                         )?)),
                         _ => {
@@ -174,7 +174,9 @@ impl<'a> FormXObject<'a> {
     pub(crate) fn resolve(id: ObjectId, stream: &'a Stream, pdf: &'a Pdf) -> Result<Self> {
         let id = FormXObjectId(id);
         let dict = &stream.dict;
-        let oc = read_optional_field_with_fn(pdf, dict, |obj| Oc::resolve(obj, &[], pdf));
+        let oc = read_optional_field_with_fn(pdf, dict, |obj| {
+            Oc::resolve(obj, &ContentResources::Empty, pdf)
+        });
         let bbox = read_field(pdf, dict);
         let matrix = match read_optional_field(pdf, dict) {
             Some(Ok(m)) => Ok(m),
@@ -272,7 +274,7 @@ impl SoftMaskImageXObject {
         }
         match dict.get(b"ColorSpace") {
             Ok(cs) => {
-                let cs = ColorSpace::parse_object(cs, &[], pdf, 0)?;
+                let cs = ColorSpace::parse_object(cs, &ContentResources::Empty, pdf, 0)?;
                 if cs != ColorSpace::DeviceGray {
                     return Err(Error::InvalidPdfObject("soft mask must be DeviceGray"));
                 }
@@ -363,12 +365,14 @@ impl ImageXObject {
     fn resolve(
         id: ObjectId,
         stream: &Stream,
-        resource_dicts: &[&Dictionary],
+        content_resources: &ContentResources,
         pdf: &Pdf,
     ) -> Result<Self> {
         let id = ImageId(id);
         let dict = &stream.dict;
-        let oc = read_optional_field_with_fn(pdf, dict, |obj| Oc::resolve(obj, &[], pdf));
+        let oc = read_optional_field_with_fn(pdf, dict, |obj| {
+            Oc::resolve(obj, &ContentResources::Empty, pdf)
+        });
         let width = read_field(pdf, dict);
         let height = read_field(pdf, dict);
 
@@ -391,7 +395,7 @@ impl ImageXObject {
             Ok(ImageKind::Mask)
         } else {
             let colorspace = match dict.get(b"ColorSpace") {
-                Ok(cs) => ColorSpace::parse_object(cs, resource_dicts, pdf, 0),
+                Ok(cs) => ColorSpace::parse_object(cs, content_resources, pdf, 0),
                 Err(_) if let Some(ref info) = jpx_info => Ok(info.colorspace.clone()),
                 Err(_) => Err(Error::UndefinedColorSpace),
             };

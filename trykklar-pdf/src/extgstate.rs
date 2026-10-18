@@ -3,10 +3,11 @@ use crate::codec::TryFromObject;
 use crate::dict::{DictKey, read_field, read_optional_field};
 use crate::error::{Field, FieldExt, OptionalField};
 use crate::font::Font;
+use crate::resources::ContentResources;
 use crate::text::TextFontSize;
 use crate::unit::UserSpace;
 use crate::{Error, GraphicsState, Length, ObjectAsF64, Pdf, Result};
-use lopdf::{Dictionary, Object};
+use lopdf::Object;
 
 /// ISO 32000-1:2008 8.4.5 Table 58 – Entries in a Graphics State Parameter Dictionary
 #[derive(Debug, Clone)]
@@ -33,12 +34,12 @@ pub struct ExtGState {
 
 impl ExtGState {
     /// Resolves [`ExtGState`] from the key, resources and document.
-    pub fn resolve<'a>(
+    pub fn resolve(
         extgstate_key: &[u8],
-        resource_dicts: &[&'a Dictionary],
-        pdf: &'a Pdf,
+        content_resources: &ContentResources,
+        pdf: &Pdf,
     ) -> Result<Self> {
-        for d in resource_dicts {
+        for d in content_resources.resource_dictionaries() {
             if let Ok(extgstate_dict_obj) = d.get_deref(b"ExtGState", pdf.doc()) {
                 let extgstate_dict = extgstate_dict_obj.as_dict()?;
                 if let Ok(Object::Dictionary(extgstate_dict)) =

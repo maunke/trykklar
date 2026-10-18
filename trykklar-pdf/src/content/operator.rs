@@ -1,5 +1,5 @@
-//! Content Stream Operator as resolved view. Use [`crate::content::raw_operator::RawOperator`] to
-//! write into the content stream a new operator.
+//! Content Stream Operator as resolved view. Use [`crate::content::write_operator::WriteOperator`]
+//! to write into the content stream a new operator.
 
 use crate::codec::TryFromObject;
 use crate::color::{Color, ColorSpace, PatternColor};
@@ -13,6 +13,7 @@ use crate::geometry::{
 };
 use crate::optional_content::Oc;
 use crate::pattern::{Pattern, Shading, TilingPaintType};
+use crate::resources::ContentResources;
 use crate::text::{
     CharSpace, HorizontalScale, MoveText, MoveTextSetLeading, ShowText, TextFontSize, TextLeading,
     TextRenderMode, TextRise, WordSpace,
@@ -20,12 +21,12 @@ use crate::text::{
 use crate::unit::UserSpace;
 use crate::xobject::XObject;
 use crate::{Error, Matrix, Pdf, Rect, Result};
-use lopdf::{Dictionary, Object};
+use lopdf::Object;
 
 /// Content Stream Operator
 ///
 /// This is parsed from the content stream. In order to write an operator to content stream look at
-/// [`crate::content::raw_operator`].
+/// [`crate::content::write_operator`].
 ///
 /// ISO 32000-1:2008 Table A.1 – PDF content stream operators
 #[derive(Debug, Clone)]
@@ -136,7 +137,7 @@ pub enum Operator<'a> {
 impl<'a> Operator<'a> {
     pub(crate) fn resolve(
         operation: &lopdf::content::Operation,
-        resource_dicts: &[&'a Dictionary],
+        content_resources: &ContentResources<'a>,
         pdf: &'a Pdf,
         cache: &mut WalkerCache<'a>,
     ) -> Result<Self> {
@@ -144,7 +145,7 @@ impl<'a> Operator<'a> {
         let op = match operation.operator.as_str() {
             PaintXObject::OPERATOR => Self::PaintXObject(match &operands[..] {
                 [Object::Name(xobject_key)] => cache.xobject.get_or_resolve(xobject_key, || {
-                    XObject::resolve(xobject_key, resource_dicts, pdf)
+                    XObject::resolve(xobject_key, content_resources, pdf)
                 }),
                 _ => Err(Error::InvalidOperands),
             }),
@@ -162,7 +163,7 @@ impl<'a> Operator<'a> {
             // 8.6.8 Table 74 - Colour Operators
             "CS" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
+                    ColorSpace::resolve(operation, content_resources, pdf, &mut cache.color_space);
                 let color = cs
                     .as_ref()
                     .map(ColorSpace::default_color)
@@ -171,7 +172,7 @@ impl<'a> Operator<'a> {
             }
             "G" | "RG" | "K" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
+                    ColorSpace::resolve(operation, content_resources, pdf, &mut cache.color_space);
                 let color = operands
                     .iter()
                     .map(|v| v.as_float().map_err(Error::from))
@@ -181,7 +182,7 @@ impl<'a> Operator<'a> {
             }
             "cs" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
+                    ColorSpace::resolve(operation, content_resources, pdf, &mut cache.color_space);
                 let color = cs
                     .as_ref()
                     .map(ColorSpace::default_color)
@@ -190,7 +191,7 @@ impl<'a> Operator<'a> {
             }
             "g" | "rg" | "k" => {
                 let cs =
-                    ColorSpace::resolve(operation, resource_dicts, pdf, &mut cache.color_space);
+                    ColorSpace::resolve(operation, content_resources, pdf, &mut cache.color_space);
                 let color = operands
                     .iter()
                     .map(|v| v.as_float().map_err(Error::from))
@@ -214,29 +215,30 @@ impl<'a> Operator<'a> {
             ),
             "SCN" => Self::SetStrokingColor(resolve_scn_color(
                 operands,
-                resource_dicts,
+                content_resources,
                 pdf,
                 &mut cache.pattern,
             )),
             "scn" => Self::SetNonStrokingColor(resolve_scn_color(
                 operands,
-                resource_dicts,
+                content_resources,
                 pdf,
                 &mut cache.pattern,
             )),
             // 8.7.4.2 Shading Operator
             "sh" => {
                 let shading = match &operands[..] {
-                    [Object::Name(shading_name)] => resource_dicts
+                    [Object::Name(shading_name)] => content_resources
+                        .resource_dictionaries()
                         .iter()
                         .find_map(|dict| {
                             let Ok(Object::Dictionary(shadings)) =
                                 dict.get_deref(b"Shading", pdf.doc())
                             else {
-                                return None; // this dict has no /Shading — keep looking
+                                return None;
                             };
-                            let shading_obj = shadings.get_deref(shading_name, pdf.doc()).ok()?; // name absent — keep looking
-                            Some(Shading::resolve(shading_obj, resource_dicts, pdf)) // found — first match wins
+                            let shading_obj = shadings.get_deref(shading_name, pdf.doc()).ok()?;
+                            Some(Shading::resolve(shading_obj, content_resources, pdf))
                         })
                         .unwrap_or(Err(Error::ResourceNotFound {
                             kind: ResourceKind::Shading,
@@ -302,9 +304,9 @@ impl<'a> Operator<'a> {
             "Tf" => match operands[..] {
                 [Object::Name(ref font_key), ref size_obj] => {
                     let size = TextFontSize::try_from_object(pdf, None, size_obj);
-                    let font = cache
-                        .font
-                        .get_or_resolve(font_key, || Font::resolve(font_key, resource_dicts, pdf));
+                    let font = cache.font.get_or_resolve(font_key, || {
+                        Font::resolve(font_key, content_resources, pdf)
+                    });
                     Self::SetFontSize { font, size }
                 }
                 _ => Self::SetFontSize {
@@ -362,7 +364,7 @@ impl<'a> Operator<'a> {
                 let oc = match &operands[..] {
                     [Object::Name(tag), properties] => {
                         if tag == b"OC" {
-                            Ok(Some(Oc::resolve(properties, resource_dicts, pdf)))
+                            Ok(Some(Oc::resolve(properties, content_resources, pdf)))
                         } else {
                             Ok(None)
                         }
@@ -377,7 +379,7 @@ impl<'a> Operator<'a> {
                 let ext_g_state = match &operands[..] {
                     [Object::Name(extgstate_key)] => {
                         cache.ext_gstate.get_or_resolve(extgstate_key, || {
-                            ExtGState::resolve(extgstate_key, resource_dicts, pdf)
+                            ExtGState::resolve(extgstate_key, content_resources, pdf)
                         })
                     }
                     _ => Err(Error::InvalidOperands),
@@ -402,7 +404,7 @@ impl<'a> Operator<'a> {
 
 fn resolve_scn_color<'a>(
     operands: &[Object],
-    resource_dicts: &[&'a Dictionary],
+    content_resources: &ContentResources<'a>,
     pdf: &'a Pdf,
     cache: &mut ResolvedCache<Pattern<'a>>,
 ) -> Result<Color<'a>> {
@@ -414,7 +416,7 @@ fn resolve_scn_color<'a>(
     {
         scn_operands.pop();
         pattern = Some(cache.get_or_resolve(pattern_name, || {
-            Pattern::resolve(pattern_name, resource_dicts, pdf)
+            Pattern::resolve(pattern_name, content_resources, pdf)
         })?);
     }
     let mut values: Option<Box<[f32]>> = None;
