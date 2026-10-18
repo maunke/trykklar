@@ -1,6 +1,7 @@
 //! External Objects
 use crate::codec::TryFromObject;
 use crate::color::{ColorSpace, IccBased};
+use crate::content::write_operator::WriteOperations;
 use crate::dict::{self, DictKey, read_field, read_optional_field, read_optional_field_with_fn};
 use crate::error::{
     Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
@@ -8,11 +9,15 @@ use crate::error::{
 };
 use crate::geometry::Rect;
 use crate::optional_content::Oc;
-use crate::resources::{ContentResources, Resources};
+use crate::page::PdfPageId;
+use crate::resources::{
+    ContentResourceId, ContentResources, ContentResourcesMut, Resources, ResourcesMut,
+};
 use crate::stream::{FilterName, StreamFilter};
 use crate::unit::UserSpace;
 use crate::{Error, Matrix, Pdf, Result, object_id};
 use hayro_jpeg2000::ColorSpace as JpxColorSpace;
+use lopdf::content::Content;
 use lopdf::{Dictionary, Object, ObjectId, Stream};
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -194,6 +199,63 @@ impl<'a> FormXObject<'a> {
             resources,
             content,
         })
+    }
+}
+
+/// Mutable Form XObject
+pub struct FormXObjectMut<'a> {
+    pdf: &'a mut Pdf,
+    id: FormXObjectId,
+}
+
+impl<'a> FormXObjectMut<'a> {
+    /// Creates the mutation object for a given [`FormXObjectId`].
+    pub fn new(pdf: &'a mut Pdf, id: FormXObjectId) -> Self {
+        Self { pdf, id }
+    }
+
+    /// Maps into the mutable resources.
+    pub(crate) fn into_resources_mut(self) -> Result<ResourcesMut<'a>> {
+        Ok(self
+            .pdf
+            .doc_mut()
+            .get_object_mut(self.id.into())?
+            .as_stream_mut()?
+            .dict
+            .get_mut(b"Resources")?
+            .as_dict_mut()?
+            .into())
+    }
+
+    /// Sets the content with given operations. The concept behind providing the [`PdfPageId`] is to
+    /// change the resource dictionary of the page and not the form xobject in order to have a clear
+    /// updated method instead of potential duplicated new entries accross nested form xobjects.
+    pub fn set_content(&mut self, operations: WriteOperations, page_id: PdfPageId) -> Result<()> {
+        let id = if self
+            .pdf
+            .doc()
+            .get_object(self.id.into())?
+            .as_stream()?
+            .dict
+            .has(b"Resources")
+        {
+            ContentResourceId::Form(self.id)
+        } else {
+            ContentResourceId::Page(page_id)
+        };
+        let number = self.pdf.page_number_by_id(page_id)?;
+        let mut page_mut = self.pdf.page_mut(number)?;
+        let mut resources = ContentResourcesMut::new(&mut page_mut, id);
+        let content = Content {
+            operations: operations
+                .into_iter()
+                .map(|op| op.try_into_operation(&mut resources))
+                .collect::<Result<Vec<_>>>()?,
+        };
+        self.pdf
+            .doc_mut()
+            .change_content_stream(self.id.into(), content.encode()?);
+        Ok(())
     }
 }
 
@@ -444,9 +506,8 @@ pub struct ImageXObjectMut<'a> {
 
 impl<'a> ImageXObjectMut<'a> {
     /// Creates the mutation object for a given [`ImageId`].
-    pub fn try_new(pdf: &'a mut Pdf, id: ImageId) -> Result<Self> {
-        pdf.doc().get_object(id.into())?.as_stream()?;
-        Ok(Self { pdf, id })
+    pub fn new(pdf: &'a mut Pdf, id: ImageId) -> Self {
+        Self { pdf, id }
     }
 
     fn dict_mut(&mut self) -> Result<&mut Dictionary> {

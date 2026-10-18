@@ -1,14 +1,19 @@
 //! Patterns
 
 use crate::codec::TryFromObject;
+use crate::content::write_operator::WriteOperations;
 use crate::dict::{DictKey, read_field, read_field_with_fn, read_optional_field};
 use crate::error::{
     Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
     ResultExtDeref,
 };
-use crate::resources::{ContentResources, Resources};
+use crate::page::PdfPageId;
+use crate::resources::{
+    ContentResourceId, ContentResources, ContentResourcesMut, Resources, ResourcesMut,
+};
 use crate::unit::UserSpace;
 use crate::{ColorSpace, Error, Matrix, Pdf, Rect, Result, object_id};
+use lopdf::content::Content;
 use lopdf::{Dictionary, Object, ObjectId, Stream};
 use std::sync::Arc;
 
@@ -170,6 +175,51 @@ impl<'a> TilingPattern<'a> {
             matrix,
             content,
         })
+    }
+}
+
+/// Mutable [`TilingPattern`]
+pub struct TilingPatternMut<'a> {
+    pdf: &'a mut Pdf,
+    id: TilingPatternId,
+}
+
+impl<'a> TilingPatternMut<'a> {
+    /// Creates the mutable object fo a given [`TilingPatternId`]
+    pub fn new(pdf: &'a mut Pdf, id: TilingPatternId) -> Self {
+        Self { pdf, id }
+    }
+
+    /// Maps into the mutable resources.
+    pub(crate) fn into_resources_mut(self) -> Result<ResourcesMut<'a>> {
+        Ok(self
+            .pdf
+            .doc_mut()
+            .get_object_mut(self.id.into())?
+            .as_stream_mut()?
+            .dict
+            .get_mut(b"Resources")?
+            .as_dict_mut()?
+            .into())
+    }
+
+    /// Sets the content with given operations. The concept behind providing the [`PdfPageId`] is to
+    /// change the resource dictionary of the page and not the tiling pattern.
+    pub fn set_content(&mut self, operations: WriteOperations, page_id: PdfPageId) -> Result<()> {
+        let number = self.pdf.page_number_by_id(page_id)?;
+        let mut page_mut = self.pdf.page_mut(number)?;
+        let mut resources =
+            ContentResourcesMut::new(&mut page_mut, ContentResourceId::TilingPattern(self.id));
+        let content = Content {
+            operations: operations
+                .into_iter()
+                .map(|op| op.try_into_operation(&mut resources))
+                .collect::<Result<Vec<_>>>()?,
+        };
+        self.pdf
+            .doc_mut()
+            .change_content_stream(self.id.into(), content.encode()?);
+        Ok(())
     }
 }
 

@@ -4,7 +4,7 @@ use crate::content::write_operator::WriteOperations;
 use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::FieldExt;
 use crate::geometry::Rect;
-use crate::resources::PageResources;
+use crate::resources::{ContentResourcesMut, PageResources, ResourcesMut};
 use crate::unit::{UserSpace, UserUnit};
 use crate::{Error, ObjectAsF64, Pdf, PhysicalUnit, Result, object_id};
 use lopdf::content::Content;
@@ -152,17 +152,14 @@ impl<'a> PdfPageMut<'a> {
         Self { pdf, id }
     }
 
-    pub(crate) fn add_xobject<T: Into<ObjectId>>(&mut self, key: &str, id: T) -> Result<()> {
-        let id = id.into();
+    pub(crate) fn pdf_mut(&mut self) -> &mut Pdf {
+        self.pdf
+    }
+
+    pub(crate) fn into_resources_mut(self) -> Result<ResourcesMut<'a>> {
         let doc = self.pdf.doc_mut();
         let resources = doc.get_or_create_resources(self.id.into())?.as_dict_mut()?;
-
-        if !resources.has(b"XObject") {
-            resources.set(b"XObject", Dictionary::new());
-        }
-        let xobjects = resources.get_mut(b"XObject")?.as_dict_mut()?;
-        xobjects.set(key, Object::Reference(id));
-        Ok(())
+        Ok(resources.into())
     }
 
     /// Returns the page id.
@@ -172,10 +169,12 @@ impl<'a> PdfPageMut<'a> {
 
     /// Sets the content with given operations.
     pub fn set_content(&mut self, operations: WriteOperations) -> Result<()> {
+        let mut content_resources_mut =
+            ContentResourcesMut::new(self, crate::resources::ContentResourceId::Page(self.id));
         let content = Content {
             operations: operations
                 .into_iter()
-                .map(|op| op.try_into_operation(self))
+                .map(|op| op.try_into_operation(&mut content_resources_mut))
                 .collect::<Result<Vec<_>>>()?,
         };
         self.pdf

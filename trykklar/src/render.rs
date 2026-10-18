@@ -3,11 +3,10 @@ use crate::{Dpi, Error, PaintedImage, Result};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::Rgba8;
 use hayro::{PixmapSettings, RenderCache, RenderSettings, hayro_syntax, render};
-use pdf::content::write_operator::{ModifyCtm, PaintXObject, WriteOperation, WriteOperations};
+use pdf::content::write_operator::{ModifyCtm, PaintImageXObject, WriteOperation, WriteOperations};
 use pdf::geometry::{Point, Size};
 use pdf::optional_content::OCPropertiesMut;
 use pdf::page::{CropBox, MediaBox, PageRotate};
-use pdf::xobject::ImageXObjectMut;
 use pdf::{Inch, OcConfig, Pdf, Rect, UserUnit};
 use std::num::NonZeroU32;
 
@@ -218,10 +217,8 @@ impl Renderer {
         let image_id = image.xobject().id();
         let mut pdf = self.pdf.clone();
 
-        // Remove the oc entry from xobject to prevent to be hidden when rendered.
-        ImageXObjectMut::try_new(&mut pdf, image_id)?.remove_oc()?;
-
-        let paint_xobject = PaintXObject::try_from_image(image_id, &pdf)?;
+        let paint_xobject =
+            PaintImageXObject::from(image_id).with_transformation(|img| img.remove_oc());
         let number = pdf.page_number_by_id(page_id)?;
         let mut page = pdf.page_mut(number)?;
 

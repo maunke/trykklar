@@ -10,7 +10,7 @@ use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
 use crate::optional_content::Oc;
 use crate::page::{PdfPage, PdfPageId};
-use crate::resources::{ContentResources, PageResources};
+use crate::resources::{ContentResources, ContentResourcesMut, PageResources};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;
 use crate::xobject::{FormXObject, XObject};
@@ -125,7 +125,7 @@ impl<'a> From<ContentWalkerStep<'a>> for WriteOperation {
 }
 
 impl<'a> TryIntoOperation for ContentWalkerStep<'a> {
-    fn try_into_operation(&self, _page: &mut crate::page::PdfPageMut) -> Result<Operation> {
+    fn try_into_operation(&mut self, _resources: &mut ContentResourcesMut) -> Result<Operation> {
         Ok(self.raw_operation.deref().clone())
     }
 }

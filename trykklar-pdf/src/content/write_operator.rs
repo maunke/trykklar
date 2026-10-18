@@ -2,14 +2,15 @@
 //! A subset of ISO 32000-1:2008 Table A.1 – PDF content stream operators
 //! Use this to write a new operator into the content stream.
 
-use crate::page::PdfPageMut;
-use crate::{ImageId, Matrix, Pdf, Result};
+use crate::resources::ContentResourcesMut;
+use crate::xobject::{FormXObjectId, FormXObjectMut, ImageXObjectMut};
+use crate::{ImageId, Matrix, Result};
+use lopdf::Object;
 use lopdf::content::Operation;
-use lopdf::{Object, ObjectId};
 use std::sync::Arc;
 
 /// Operations
-pub type WriteOperations<'a> = Vec<WriteOperation>;
+pub type WriteOperations = Vec<WriteOperation>;
 
 /// A Write Operation from a present raw or a new operation
 pub enum WriteOperation {
@@ -27,9 +28,12 @@ impl WriteOperation {
 
     // This conversion consumes self in order to allow the raw operator to move into the operator if
     // the refcount is 1.
-    pub(crate) fn try_into_operation(self, page: &mut PdfPageMut) -> Result<Operation> {
+    pub(crate) fn try_into_operation(
+        self,
+        resources: &mut ContentResourcesMut,
+    ) -> Result<Operation> {
         match self {
-            Self::New(op) => op.try_into_operation(page),
+            Self::New(mut op) => op.try_into_operation(resources),
             Self::Raw(op) => Ok(Arc::unwrap_or_clone(op)),
         }
     }
@@ -38,51 +42,103 @@ impl WriteOperation {
 /// Converts to an operation.
 pub trait TryIntoOperation {
     /// Converts to an operation.
-    fn try_into_operation(&self, page: &mut PdfPageMut) -> Result<Operation>;
+    fn try_into_operation(&mut self, resources: &mut ContentResourcesMut) -> Result<Operation>;
 }
 
 pub(crate) trait OperatorName {
     const OPERATOR: &'static str;
 }
 
-#[derive(Debug, Clone, Copy)]
-enum XObjectId {
-    Image(ImageId),
+pub(crate) const PAINT_XOBJECT_OPERATOR: &str = "Do";
+
+type ImageXObjectTransform = Option<Box<dyn FnOnce(&mut ImageXObjectMut) -> Result<()>>>;
+
+/// Paint ImageXObject with optional transformation.
+///
+/// > `Do`: Invoke named XObject
+pub struct PaintImageXObject {
+    id: ImageId,
+    transform: ImageXObjectTransform,
 }
 
-impl From<XObjectId> for ObjectId {
-    fn from(value: XObjectId) -> Self {
-        match value {
-            XObjectId::Image(id) => id.get(),
+impl From<ImageId> for PaintImageXObject {
+    fn from(id: ImageId) -> Self {
+        Self {
+            id,
+            transform: None,
         }
     }
 }
 
-/// Paint [`crate::XObject`]
-///
-/// > `Do`: Invoke named XObject
-pub struct PaintXObject {
-    id: XObjectId,
-}
-
-impl PaintXObject {
-    /// Creates [`PaintXObject`] by [`ImageId`].
-    pub fn try_from_image(id: ImageId, pdf: &Pdf) -> Result<Self> {
-        pdf.doc().get_object(id.into())?.as_stream()?;
-        let id = XObjectId::Image(id);
-        Ok(Self { id })
+impl PaintImageXObject {
+    /// Runs in [`TryIntoOperation`] the transformation on [`ImageXObjectMut`].
+    pub fn with_transformation(
+        mut self,
+        value: impl FnOnce(&mut ImageXObjectMut) -> Result<()> + 'static,
+    ) -> Self {
+        self.transform = Some(Box::new(value));
+        self
     }
 }
 
-impl OperatorName for PaintXObject {
-    const OPERATOR: &'static str = "Do";
+impl OperatorName for PaintImageXObject {
+    const OPERATOR: &'static str = PAINT_XOBJECT_OPERATOR;
 }
 
-impl TryIntoOperation for PaintXObject {
-    fn try_into_operation(&self, page: &mut PdfPageMut) -> Result<Operation> {
-        let key = match self.id {
-            XObjectId::Image(id) => format!("TRYKKLAR_IM_{}", id.get().0),
-        };
+impl TryIntoOperation for PaintImageXObject {
+    fn try_into_operation(&mut self, resources: &mut ContentResourcesMut) -> Result<Operation> {
+        let pdf_mut = resources.pdf_mut();
+        if let Some(transform) = self.transform.take() {
+            let mut image = ImageXObjectMut::new(pdf_mut, self.id);
+            transform(&mut image)?;
+        }
+        let key = format!("TRYKKLAR_IM_{}_{}", self.id.get().0, self.id.get().1);
+        resources.add_xobject(&key, self.id)?;
+        let operands = vec![Object::Name(key.into())];
+        Ok(Operation::new(Self::OPERATOR, operands))
+    }
+}
+
+type FormXObjectTransform = Option<Box<dyn FnOnce(&mut FormXObjectMut) -> Result<()>>>;
+
+/// Paint FormXObject with optional transformation.
+///
+/// > `Do`: Invoke named XObject
+pub struct PaintFormXObject {
+    id: FormXObjectId,
+    transform: FormXObjectTransform,
+}
+
+impl PaintFormXObject {
+    /// Creates [`PaintFormXObject`] by [`FormXObjectId`].
+    pub fn new(id: FormXObjectId) -> Self {
+        Self {
+            id,
+            transform: None,
+        }
+    }
+
+    /// Runs in [`TryIntoOperation`] the transformation on [`FormXObjectMut`].
+    pub fn with_transformation(
+        mut self,
+        value: impl FnOnce(&mut FormXObjectMut) -> Result<()> + 'static,
+    ) -> Self {
+        self.transform = Some(Box::new(value));
+        self
+    }
+}
+
+impl OperatorName for PaintFormXObject {
+    const OPERATOR: &'static str = PAINT_XOBJECT_OPERATOR;
+}
+
+impl TryIntoOperation for PaintFormXObject {
+    fn try_into_operation(&mut self, page: &mut ContentResourcesMut) -> Result<Operation> {
+        if let Some(transform) = self.transform.take() {
+            let mut image = FormXObjectMut::new(page.pdf_mut(), self.id);
+            transform(&mut image)?;
+        }
+        let key = format!("TRYKKLAR_FORM_{}_{}", self.id.get().0, self.id.get().1);
         page.add_xobject(&key, self.id)?;
         let operands = vec![Object::Name(key.into())];
         Ok(Operation::new(Self::OPERATOR, operands))
@@ -108,7 +164,7 @@ impl OperatorName for ModifyCtm {
 }
 
 impl TryIntoOperation for ModifyCtm {
-    fn try_into_operation(&self, _page: &mut PdfPageMut) -> Result<Operation> {
+    fn try_into_operation(&mut self, _resources: &mut ContentResourcesMut) -> Result<Operation> {
         let operator = Self::OPERATOR;
         let Matrix { a, b, c, d, e, f } = self.matrix;
         let operands = vec![

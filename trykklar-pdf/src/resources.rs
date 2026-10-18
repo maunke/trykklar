@@ -2,6 +2,9 @@
 
 use crate::codec::TryFromObject;
 use crate::dict::DictKey;
+use crate::page::{PdfPageId, PdfPageMut};
+use crate::pattern::{TilingPatternId, TilingPatternMut};
+use crate::xobject::{FormXObjectId, FormXObjectMut};
 use crate::{Error, Pdf, PdfPage, Result};
 use lopdf::{Dictionary, Object, ObjectId};
 
@@ -89,5 +92,83 @@ impl<'a> ContentResources<'a> {
             Self::Page(page) => page.0.iter().map(|p| p.get()).collect::<Vec<_>>(),
             Self::Empty => vec![],
         }
+    }
+}
+
+pub(crate) struct ResourcesMut<'a>(&'a mut Dictionary);
+
+impl<'a> From<&'a mut Dictionary> for ResourcesMut<'a> {
+    fn from(value: &'a mut Dictionary) -> Self {
+        Self(value)
+    }
+}
+
+impl<'a> ResourcesMut<'a> {
+    pub fn has(&self, key: &[u8]) -> bool {
+        self.0.has(key)
+    }
+
+    pub fn set(&mut self, key: &[u8], obj: impl Into<Object>) -> Result<()> {
+        self.0.set(key, obj.into());
+        Ok(())
+    }
+
+    pub fn set_with_sub_key(
+        &mut self,
+        key: &[u8],
+        sub_key: &[u8],
+        obj: impl Into<Object>,
+    ) -> Result<()> {
+        self.0.get_mut(key)?.as_dict_mut()?.set(sub_key, obj.into());
+        Ok(())
+    }
+}
+
+pub(crate) enum ContentResourceId {
+    Page(PdfPageId),
+    Form(FormXObjectId),
+    TilingPattern(TilingPatternId),
+}
+
+/// Mutable Resources related to Content
+pub struct ContentResourcesMut<'a, 'b> {
+    page: &'a mut PdfPageMut<'b>,
+    id: ContentResourceId,
+}
+
+impl<'a, 'b> ContentResourcesMut<'a, 'b> {
+    pub(crate) fn new(page: &'a mut PdfPageMut<'b>, id: ContentResourceId) -> Self {
+        Self { page, id }
+    }
+}
+
+impl<'a, 'b> ContentResourcesMut<'a, 'b> {
+    pub(crate) fn pdf_mut(&mut self) -> &mut Pdf {
+        self.page.pdf_mut()
+    }
+
+    fn resources_mut(&mut self) -> Result<ResourcesMut<'_>> {
+        match self.id {
+            ContentResourceId::Page(id) => {
+                PdfPageMut::new(self.page.pdf_mut(), id).into_resources_mut()
+            }
+            ContentResourceId::Form(id) => {
+                FormXObjectMut::new(self.page.pdf_mut(), id).into_resources_mut()
+            }
+            ContentResourceId::TilingPattern(id) => {
+                TilingPatternMut::new(self.page.pdf_mut(), id).into_resources_mut()
+            }
+        }
+    }
+
+    pub(crate) fn add_xobject<T: Into<ObjectId>>(&mut self, key: &str, id: T) -> Result<()> {
+        const XOBJECT_KEY: &[u8] = b"XObject";
+        let id = id.into();
+        let mut resources = self.resources_mut()?;
+        if !resources.has(XOBJECT_KEY) {
+            resources.set(XOBJECT_KEY, Dictionary::new())?;
+        }
+        resources.set_with_sub_key(XOBJECT_KEY, key.as_bytes(), Object::Reference(id))?;
+        Ok(())
     }
 }
