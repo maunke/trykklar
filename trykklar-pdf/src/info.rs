@@ -420,9 +420,8 @@ pub struct InfoMut<'a> {
 
 impl<'a> InfoMut<'a> {
     /// Creates the mutation object for a given [`InfoId`].
-    pub fn try_new(pdf: &'a mut Pdf, id: InfoId) -> Result<Self> {
-        dict::exists(id, pdf)?;
-        Ok(Self { pdf, id })
+    pub fn new(pdf: &'a mut Pdf, id: InfoId) -> Self {
+        Self { pdf, id }
     }
 
     /// Creates a new information dictionary.
@@ -438,13 +437,13 @@ impl<'a> InfoMut<'a> {
 
     /// Gets or creates a trailer information dictionary.
     pub fn get_or_create(pdf: &'a mut Pdf) -> Result<Self> {
-        match pdf.info() {
+        Ok(match pdf.info() {
             Some(info) => {
                 let id = info?.id();
-                Self::try_new(pdf, id)
+                Self::new(pdf, id)
             }
-            None => Ok(Self::create(pdf)),
-        }
+            None => Self::create(pdf),
+        })
     }
 
     /// Sets the title.
@@ -536,7 +535,7 @@ mod tests {
         let mut pdf = Pdf::load("tests/assets/hierarchical_layers.pdf")?;
         let info = pdf.info().expect("info should exist here")?;
         let info_id = info.id();
-        let mut info_mut = InfoMut::try_new(&mut pdf, info_id)?;
+        let mut info_mut = InfoMut::new(&mut pdf, info_id);
 
         let title_name = "Awesome Artwork";
         let title = Title::new(title_name);
