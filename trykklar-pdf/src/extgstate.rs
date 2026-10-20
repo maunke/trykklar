@@ -1,13 +1,13 @@
 //! Graphics State Parameter Dictionaries
-use crate::codec::TryFromObject;
-use crate::dict::{DictKey, read_field, read_optional_field};
+use crate::codec::{TryFromObject, TryIntoObject};
+use crate::dict::{self, DictKey, read_field, read_optional_field};
 use crate::error::{Field, FieldExt, OptionalField};
 use crate::font::Font;
 use crate::resources::ContentResources;
 use crate::text::TextFontSize;
 use crate::unit::UserSpace;
-use crate::{Error, GraphicsState, Length, ObjectAsF64, Pdf, Result};
-use lopdf::Object;
+use crate::{Error, GraphicsState, Length, ObjectAsF64, Pdf, Result, object_id};
+use lopdf::{Object, dictionary};
 
 /// ISO 32000-1:2008 8.4.5 Table 58 – Entries in a Graphics State Parameter Dictionary
 #[derive(Debug, Clone)]
@@ -136,6 +136,54 @@ impl ExtGState {
     }
 }
 
+object_id!(ExtGStateId);
+
+/// Mutable [`ExtGState`]
+///
+/// In general, ExtGState values in the resources dictionary are direct or indirect. We need an Id
+/// to transport via readers and writers, such that mutable objects are always converted to an
+/// indirect object.
+pub struct ExtGStateMut<'a> {
+    pdf: &'a mut Pdf,
+    id: ExtGStateId,
+}
+
+impl<'a> ExtGStateMut<'a> {
+    /// Creates a new indirect and empty extgstate object.
+    pub fn create(pdf: &'a mut Pdf) -> Self {
+        let object_id = pdf
+            .doc_mut()
+            .add_object(dictionary! {"Type" => "ExtGState"});
+        let id = ExtGStateId(object_id);
+        Self { pdf, id }
+    }
+
+    /// Returns the ID.
+    pub fn id(&self) -> ExtGStateId {
+        self.id
+    }
+
+    /// Sets [`Overprint`].
+    pub fn set_overprint(&mut self, value: Overprint) -> Result<()> {
+        dict::write(value, self.pdf, |pdf| dict::get_mut(self.id, pdf))
+    }
+
+    /// Sets [`NonStrokingOverprint`].
+    pub fn set_non_stroking_overprint(&mut self, value: NonStrokingOverprint) -> Result<()> {
+        dict::write(value, self.pdf, |pdf| dict::get_mut(self.id, pdf))
+    }
+
+    /// Sets [`OverprintMode`].
+    pub fn set_overprint_mode(&mut self, value: OverprintMode) -> Result<()> {
+        dict::write(value, self.pdf, |pdf| dict::get_mut(self.id, pdf))
+    }
+
+    /// Sets [`BlendMode`].
+    pub fn set_blend_mode(&mut self, value: BlendMode) -> Result<()> {
+        dict::write(value, self.pdf, |pdf| dict::get_mut(self.id, pdf))
+    }
+}
+
 /// `/OPM` Overprint Mode
 ///
 /// ISO 32000-1:2008 8.4.5, Table 58:
@@ -181,6 +229,16 @@ impl TryFromObject<'_> for OverprintMode {
     }
 }
 
+impl TryIntoObject for OverprintMode {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
+        let value = match self {
+            Self::Standard => 0,
+            Self::NonZero => 1,
+        };
+        Ok(Object::Integer(value))
+    }
+}
+
 /// `/OP` Overprint Flag
 ///
 /// ISO 32000-1:2008 8.4.5, Table 58:
@@ -201,6 +259,11 @@ impl Overprint {
     pub fn get(&self) -> bool {
         self.0
     }
+
+    /// Creates a new overprint value.
+    pub fn new(value: bool) -> Self {
+        Self(value)
+    }
 }
 
 impl DictKey for Overprint {
@@ -215,6 +278,12 @@ impl TryFromObject<'_> for Overprint {
     ) -> Result<Self> {
         let op = obj.as_bool()?;
         Ok(Self(op))
+    }
+}
+
+impl TryIntoObject for Overprint {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
+        Ok(Object::Boolean(self.0))
     }
 }
 
@@ -235,6 +304,11 @@ impl NonStrokingOverprint {
     pub fn get(&self) -> bool {
         self.0
     }
+
+    /// Creates a new non stroking overprint value.
+    pub fn new(value: bool) -> Self {
+        Self(value)
+    }
 }
 
 impl DictKey for NonStrokingOverprint {
@@ -249,6 +323,12 @@ impl TryFromObject<'_> for NonStrokingOverprint {
     ) -> Result<Self> {
         let op = obj.as_bool()?;
         Ok(Self(op))
+    }
+}
+
+impl TryIntoObject for NonStrokingOverprint {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
+        Ok(Object::Boolean(self.0))
     }
 }
 
@@ -493,6 +573,35 @@ impl TryFrom<&[u8]> for BlendMode {
             _ => return Err(Error::InvalidPdfObject("Blend mode name is invalid")),
         };
         Ok(variant)
+    }
+}
+
+impl TryIntoObject for BlendMode {
+    fn try_into_object(self, _pdf: &mut Pdf) -> Result<Object> {
+        let name = match self {
+            Self::Normal => "Normal",
+            Self::Compatible => {
+                return Err(Error::InvalidPdfObject(
+                    "BlendMode compatible should not be used",
+                ));
+            }
+            Self::Multiply => "Multiply",
+            Self::Screen => "Screen",
+            Self::Overlay => "Overlay",
+            Self::Darken => "Darken",
+            Self::Lighten => "Lighten",
+            Self::ColorDodge => "ColorDodge",
+            Self::ColorBurn => "ColorBurn",
+            Self::HardLight => "HardLight",
+            Self::SoftLight => "SoftLight",
+            Self::Difference => "Difference",
+            Self::Exclusion => "Exclusion",
+            Self::Hue => "Hue",
+            Self::Saturation => "Saturation",
+            Self::Color => "Color",
+            Self::Luminosity => "Luminosity",
+        };
+        Ok(Object::Name(name.into()))
     }
 }
 
