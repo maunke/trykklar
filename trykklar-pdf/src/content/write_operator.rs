@@ -50,6 +50,32 @@ pub(crate) trait OperatorName {
     const OPERATOR: &'static str;
 }
 
+/// Save Graphics State
+pub struct SaveGraphicsState;
+
+impl OperatorName for SaveGraphicsState {
+    const OPERATOR: &'static str = "q";
+}
+
+impl TryIntoOperation for SaveGraphicsState {
+    fn try_into_operation(&mut self, _resources: &mut ContentResourcesMut) -> Result<Operation> {
+        Ok(Operation::new(Self::OPERATOR, vec![]))
+    }
+}
+
+/// Restore Graphics State
+pub struct RestoreGraphicsState;
+
+impl OperatorName for RestoreGraphicsState {
+    const OPERATOR: &'static str = "Q";
+}
+
+impl TryIntoOperation for RestoreGraphicsState {
+    fn try_into_operation(&mut self, _resources: &mut ContentResourcesMut) -> Result<Operation> {
+        Ok(Operation::new(Self::OPERATOR, vec![]))
+    }
+}
+
 /// [`crate::content::Operator::SetExtGState`]
 ///
 /// > `gs`: (PDF 1.2) Set parameters from graphics state parameter dictionary
