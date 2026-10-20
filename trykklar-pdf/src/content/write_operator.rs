@@ -2,6 +2,7 @@
 //! A subset of ISO 32000-1:2008 Table A.1 – PDF content stream operators
 //! Use this to write a new operator into the content stream.
 
+use crate::extgstate::ExtGStateId;
 use crate::resources::ContentResourcesMut;
 use crate::xobject::{FormXObjectId, FormXObjectMut, ImageXObjectMut};
 use crate::{ImageId, Matrix, Result};
@@ -47,6 +48,30 @@ pub trait TryIntoOperation {
 
 pub(crate) trait OperatorName {
     const OPERATOR: &'static str;
+}
+
+/// [`crate::content::Operator::SetExtGState`]
+///
+/// > `gs`: (PDF 1.2) Set parameters from graphics state parameter dictionary
+pub struct SetExtGState(ExtGStateId);
+
+impl From<ExtGStateId> for SetExtGState {
+    fn from(value: ExtGStateId) -> Self {
+        Self(value)
+    }
+}
+
+impl OperatorName for SetExtGState {
+    const OPERATOR: &'static str = "gs";
+}
+
+impl TryIntoOperation for SetExtGState {
+    fn try_into_operation(&mut self, resources: &mut ContentResourcesMut) -> Result<Operation> {
+        let key = format!("TRYKKLAR_EXTGSTATE_{}_{}", self.0.get().0, self.0.get().1);
+        resources.add_ext_g_state(&key, self.0)?;
+        let operands = vec![Object::Name(key.into())];
+        Ok(Operation::new(Self::OPERATOR, operands))
+    }
 }
 
 pub(crate) const PAINT_XOBJECT_OPERATOR: &str = "Do";
