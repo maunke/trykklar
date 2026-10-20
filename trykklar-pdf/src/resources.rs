@@ -2,6 +2,7 @@
 
 use crate::codec::TryFromObject;
 use crate::dict::DictKey;
+use crate::extgstate::ExtGStateId;
 use crate::page::{PdfPageId, PdfPageMut};
 use crate::pattern::{TilingPatternId, TilingPatternMut};
 use crate::xobject::{FormXObjectId, FormXObjectMut};
@@ -169,6 +170,16 @@ impl<'a, 'b> ContentResourcesMut<'a, 'b> {
             resources.set(XOBJECT_KEY, Dictionary::new())?;
         }
         resources.set_with_sub_key(XOBJECT_KEY, key.as_bytes(), Object::Reference(id))?;
+        Ok(())
+    }
+
+    pub(crate) fn add_ext_g_state(&mut self, key: &str, id: ExtGStateId) -> Result<()> {
+        const KEY: &[u8] = b"ExtGState";
+        let mut resources = self.resources_mut()?;
+        if !resources.has(KEY) {
+            resources.set(KEY, Dictionary::new())?;
+        }
+        resources.set_with_sub_key(KEY, key.as_bytes(), Object::Reference(id.into()))?;
         Ok(())
     }
 }
