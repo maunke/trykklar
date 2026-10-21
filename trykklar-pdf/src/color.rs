@@ -291,16 +291,117 @@ impl IccProfileDescription {
     }
 }
 
+/// Icc Profile ColorSpace
+///
+/// [Specification ICC.1:2022 (Profile version 4.4.0.0)](https://archive.color.org/specification/ICC.1-2022-05.pdf)
+///
+/// 7.2.6 Data colour space field (bytes 16 to 20)
+///
+/// Table 19 — Data colour space signatures
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IccProfileColorSpace {
+    /// > nCIEXYZ or PCSXYZa
+    Xyz,
+    /// > CIELAB or PCSLABb
+    Lab,
+    /// > CIELUV
+    CieLuv,
+    /// > YCbCr
+    YCbCr,
+    /// > CIEYxy
+    CieYxy,
+    /// > RGB
+    Rgb,
+    /// > GRAY
+    Gray,
+    /// > HSV
+    Hsv,
+    /// > HLS
+    Hls,
+    /// > CMYK
+    Cmyk,
+    /// > CMY
+    Cmy,
+    /// > 2 colour
+    Colour2,
+    /// > 3 colour
+    Colour3,
+    /// > 4 colour
+    Colour4,
+    /// > 5 colour
+    Colour5,
+    /// > 6 colour
+    Colour6,
+    /// > 7 colour
+    Colour7,
+    /// > 8 colour
+    Colour8,
+    /// > 9 colour
+    Colour9,
+    /// > 10 colour
+    Colour10,
+    /// > 11 colour
+    Colour11,
+    /// > 12 colour
+    Colour12,
+    /// > 13 colour
+    Colour13,
+    /// > 14 colour
+    Colour14,
+    /// > 15 colour
+    Colour15,
+}
+
+impl IccProfileColorSpace {
+    fn from_profile(content: &[u8]) -> Result<Self> {
+        let colorspace = match content.get(16..20) {
+            None => return Err(Error::InvalidIccProfile),
+            Some(cs) => match cs.trim_ascii() {
+                b"XYZ" => Self::Xyz,
+                b"Lab" => Self::Lab,
+                b"Luv" => Self::CieLuv,
+                b"YCpr" => Self::YCbCr,
+                b"Yxy" => Self::CieYxy,
+                b"RGB" => Self::Rgb,
+                b"GRAY" => Self::Gray,
+                b"HSV" => Self::Hsv,
+                b"HLS" => Self::Hls,
+                b"CMYK" => Self::Cmyk,
+                b"CMY" => Self::Cmy,
+                b"2CLR" => Self::Colour2,
+                b"3CLR" => Self::Colour3,
+                b"4CLR" => Self::Colour4,
+                b"5CLR" => Self::Colour5,
+                b"6CLR" => Self::Colour6,
+                b"7CLR" => Self::Colour7,
+                b"8CLR" => Self::Colour8,
+                b"9CLR" => Self::Colour9,
+                b"ACLR" => Self::Colour10,
+                b"BCLR" => Self::Colour11,
+                b"CCLR" => Self::Colour12,
+                b"DCLR" => Self::Colour13,
+                b"ECLR" => Self::Colour14,
+                b"FCLR" => Self::Colour15,
+                _ => return Err(Error::InvalidIccProfile),
+            },
+        };
+        Ok(colorspace)
+    }
+}
+
 /// ICCBased ColorSpace
 ///
 /// ISO 32000-1:2008 8.6.5.5 ICCBased Colour Spaces
 /// Table 66 - Additional Entries Specific to an ICC Profile Stream Dictionary
+///
+/// Additionally fields are added, like profile id, description and colorspace.
 #[derive(Debug, Clone)]
 pub struct IccBased {
     id: IccBasedId,
     n: Field<IccComponents>,
     profile_id: Result<IccProfileId>,
     description: Option<IccProfileDescription>,
+    colorspace: Result<IccProfileColorSpace>,
 }
 
 impl PartialEq for IccBased {
@@ -329,11 +430,13 @@ impl IccBased {
         let content = stream.get_plain_content()?;
         let profile_id = IccProfileId::from_profile(&content);
         let description = IccProfileDescription::from_profile(&content);
+        let colorspace = IccProfileColorSpace::from_profile(&content);
         Ok(Self {
             id,
             n,
             profile_id,
             description,
+            colorspace,
         })
     }
 
@@ -346,11 +449,13 @@ impl IccBased {
         let n = Ok(IccComponents::try_from(num_channels as i64)?);
         let profile_id = IccProfileId::from_profile(content);
         let description = IccProfileDescription::from_profile(content);
+        let colorspace = IccProfileColorSpace::from_profile(content);
         Ok(Self {
             id,
             n,
             profile_id,
             description,
+            colorspace,
         })
     }
 
@@ -367,6 +472,11 @@ impl IccBased {
     /// Returns the profile description.
     pub fn description(&self) -> Option<&IccProfileDescription> {
         self.description.as_ref()
+    }
+
+    /// Returns the [`IccProfileColorSpace`]
+    pub fn colorspace(&self) -> Result<IccProfileColorSpace> {
+        self.colorspace.ok_ref().copied()
     }
 }
 
