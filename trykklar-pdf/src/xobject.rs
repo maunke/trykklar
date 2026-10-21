@@ -1,6 +1,6 @@
 //! External Objects
 use crate::codec::TryFromObject;
-use crate::color::{ColorSpace, IccBased};
+use crate::color::{ColorSpace, IccBased, IccProfileColorSpace};
 use crate::content::write_operator::WriteOperations;
 use crate::dict::{self, DictKey, read_field, read_optional_field, read_optional_field_with_fn};
 use crate::error::{
@@ -114,6 +114,7 @@ pub struct FormXObject<'a> {
     matrix: Result<Matrix>,
     resources: OptionalField<Resources<'a>>,
     content: Result<Vec<u8>>,
+    group: OptionalField<GroupXObject>,
 }
 
 impl<'a> FormXObject<'a> {
@@ -153,6 +154,11 @@ impl<'a> FormXObject<'a> {
         self.content.ok_deref()
     }
 
+    /// Returns the [`GroupXObject`].
+    pub fn group(&self) -> OptionalField<&GroupXObject> {
+        self.group.as_field_ref()
+    }
+
     /// Returns the resources dictionary.
     ///
     /// > (Optional but strongly recommended; PDF 1.2) A dictionary specifying any resources (such
@@ -190,6 +196,7 @@ impl<'a> FormXObject<'a> {
         };
         let resources = read_optional_field(pdf, dict);
         let content = stream.get_plain_content().map_err(Into::into);
+        let group = read_optional_field(pdf, dict);
 
         Ok(FormXObject {
             id,
@@ -198,7 +205,237 @@ impl<'a> FormXObject<'a> {
             matrix,
             resources,
             content,
+            group,
         })
+    }
+}
+
+/// Group XObject
+///
+/// ISO 32000-1:2008 Table 95 – Additional Entries Specific to a Type 1 Form Dictionary
+///
+/// > (Optional; PDF 1.4) A group attributes dictionary indicating that the contents of the form
+/// > XObject shall be treated as a group and specifying the attributes of that group (see 8.10.3,
+/// > "Group XObjects"). If a Ref entry (see below) is present, the group attributes shall also
+/// > apply to the external page imported by that entry, which allows such an imported page to be
+/// > treated as a group without further modification.
+///
+/// 8.10.3 Group XObjects
+///
+/// > As shown in Table 96, every group XObject shall have a group subtype (specified by the S entry
+/// > in the group attributes dictionary) that determines the format and meaning of the dictionary’s
+/// > remaining entries. This specification only defines one subtype, a transparency group XObject
+/// > (subtype Transparency) representing a transparency group for use in the transparent imaging
+/// > model (see 11.4, "Transparency Groups"). The remaining contents of this type of dictionary are
+/// > described in 11.6.6, "Transparency Group XObjects".
+///
+/// Since only the subtype transparency group is valid, the GroupXObject will cover all transparency
+/// group fields. So we do not introduce a one member enum here.
+///
+/// 11.6.6 Transparency Group XObjects Table 147 – Additional entries specific to a transparency
+/// group attributes dictionary
+#[derive(Debug, Clone)]
+pub struct GroupXObject {
+    sub_type: Field<GroupSubType>,
+    colorspace: OptionalField<GroupColorSpace>,
+    isolation: Result<GroupIsolation>,
+    knockout: Result<GroupKnockout>,
+}
+
+impl GroupXObject {
+    /// Returns [`GroupSubType`]
+    pub fn sub_type(&self) -> Field<GroupSubType> {
+        self.sub_type.as_field_ref().copied()
+    }
+
+    /// Returns [`GroupColorSpace`]
+    pub fn colorspace(&self) -> OptionalField<&GroupColorSpace> {
+        self.colorspace.as_field_ref()
+    }
+
+    /// Returns [`GroupIsolation`]
+    pub fn isolation(&self) -> Result<GroupIsolation> {
+        self.isolation.ok_ref().copied()
+    }
+
+    /// Returns [`GroupKnockout`]
+    pub fn knockout(&self) -> Result<GroupKnockout> {
+        self.knockout.ok_ref().copied()
+    }
+}
+
+impl DictKey for GroupXObject {
+    const KEY: &'static [u8] = b"Group";
+}
+
+impl TryFromObject<'_> for GroupXObject {
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let dict = obj.as_dict()?;
+        let sub_type = read_field(pdf, dict);
+        let colorspace = read_optional_field(pdf, dict);
+        let isolation = match read_optional_field(pdf, dict) {
+            Some(i) => i,
+            None => Ok(GroupIsolation::default()),
+        };
+        let knockout = match read_optional_field(pdf, dict) {
+            Some(i) => i,
+            None => Ok(GroupKnockout::default()),
+        };
+
+        Ok(Self {
+            sub_type,
+            colorspace,
+            isolation,
+            knockout,
+        })
+    }
+}
+
+/// `/S` Group Subtype
+///
+/// ISO 32000-1:2008 Table 96 Entries Common to all Group Attributes Dictionaries
+///
+/// > (Required) The group subtype, which identifies the type of group whose attributes this
+/// > dictionary describes and determines the format and meaning of the dictionary’s remaining
+/// > entries. The only group subtype defined is Transparency; see 11.6.6, "Transparency Group
+/// > XObjects", for the remaining contents of this type of dictionary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupSubType {
+    /// Transparency Group XObject
+    Transparency,
+}
+
+impl DictKey for GroupSubType {
+    const KEY: &'static [u8] = b"S";
+}
+
+impl TryFromObject<'_> for GroupSubType {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let variant = match obj.as_name()? {
+            b"Transparency" => Self::Transparency,
+            _ => {
+                return Err(Error::InvalidPdfObject("GroupSubType must be Transparency"));
+            }
+        };
+        Ok(variant)
+    }
+}
+
+/// `/I` Group Isolation
+///
+/// ISO 32000-1:2008 Table 96 Entries Common to all Group Attributes Dictionaries
+///
+/// > (Optional) A flag specifying whether the transparency group is isolated (see “Isolated
+/// > Groups”). If this flag is true, objects within the group shall be composited against a fully
+/// > transparent initial backdrop; if false, they shall be composited against the group’s backdrop.
+/// > Default value: false
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GroupIsolation(bool);
+
+impl GroupIsolation {
+    /// Returns the flag boolean.
+    pub fn get(&self) -> bool {
+        self.0
+    }
+}
+
+impl DictKey for GroupIsolation {
+    const KEY: &'static [u8] = b"I";
+}
+
+impl TryFromObject<'_> for GroupIsolation {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let flag = obj.as_bool()?;
+        Ok(Self(flag))
+    }
+}
+
+/// `/K` Group Knockout
+///
+/// ISO 32000-1:2008 Table 96 Entries Common to all Group Attributes Dictionaries
+///
+/// > (Optional) A flag specifying whether the transparency group is a knockout group (see “Knockout
+/// > Groups”). If this flag is false, later objects within the group shall be composited with
+/// > earlier ones with which they overlap; if true, they shall be composited with the group’s
+/// > initial backdrop and shall overwrite (“knock out”) any earlier overlapping objects. Default
+/// > value: false.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GroupKnockout(bool);
+
+impl GroupKnockout {
+    /// Returns the flag boolean.
+    pub fn get(&self) -> bool {
+        self.0
+    }
+}
+
+impl DictKey for GroupKnockout {
+    const KEY: &'static [u8] = b"K";
+}
+
+impl TryFromObject<'_> for GroupKnockout {
+    fn try_from_object(_pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let flag = obj.as_bool()?;
+        Ok(Self(flag))
+    }
+}
+
+/// `/CS` Group ColorSpace
+///
+/// ISO 32000-1:2008 Table 147 – Additional entries specific to a transparency group attributes
+/// dictionary
+///
+/// > (Sometimes required) The group colour space, which is used for the
+/// > following purposes:
+/// > - As the colour space into which colours shal be converted when painted into the group
+/// > - As the blending colour space in which objects shal be composited within the group (see
+/// > “Blending Colour Space”)
+/// > - As the colour space of the group as a whole when it in turn is painted as an object onto its
+/// > backdrop
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GroupColorSpace(ColorSpace);
+
+impl GroupColorSpace {
+    /// Returns the [`ColorSpace`].
+    pub fn get(&self) -> &ColorSpace {
+        &self.0
+    }
+}
+
+impl DictKey for GroupColorSpace {
+    const KEY: &'static [u8] = b"CS";
+}
+
+impl TryFromObject<'_> for GroupColorSpace {
+    fn try_from_object(pdf: &'_ Pdf, _id: Option<ObjectId>, obj: &'_ Object) -> Result<Self> {
+        let cs = ColorSpace::parse_object(obj, &ContentResources::Empty, pdf, 0);
+        if matches!(
+            cs,
+            Ok(ColorSpace::Lab
+                | ColorSpace::Pattern(..)
+                | ColorSpace::DeviceN(..)
+                | ColorSpace::Separation(..)
+                | ColorSpace::Indexed(..))
+        ) {
+            return Err(Error::InvalidPdfObject(
+                "provided group colorspace is not allowed",
+            ));
+        }
+        if let Ok(ColorSpace::IccBased(ref icc_based)) = cs
+            && !matches!(
+                icc_based.colorspace()?,
+                IccProfileColorSpace::Cmyk | IccProfileColorSpace::Gray | IccProfileColorSpace::Rgb
+            )
+        {
+            return Err(Error::InvalidPdfObject(
+                "provided group colorspace icc with non gray, rgb and cmyk is not allowed",
+            ));
+        }
+        Ok(Self(cs?))
     }
 }
 

@@ -614,6 +614,28 @@ impl Indexed {
 }
 
 impl ColorSpace {
+    /// The are 2 kind of resolvings: inside or outside of content stream.
+    /// - Inside: the keys are looked up in the corresponding resource dictionary
+    ///
+    /// > Within a content stream, the CS or cs operator establishes the current colour space
+    /// > parameter in the graphics state. The operand shall always be name object, which either
+    /// > identifies one of the colour spaces that need no additional parameters (DeviceGray,
+    /// > DeviceRGB, DeviceCMYK, or some cases of Pattern) or shall be used as a key in the
+    /// > ColorSpace subdictionary of the current resource dictionary (see 7.8.3, "Resource
+    /// > Dictionaries"). In the latter case, the value of the dictionary entry in turn shall be a
+    /// > colour space array or name. A colour space array shall never be inline within a content
+    /// > stream.
+    ///
+    /// - Outside:
+    ///
+    /// > Outside a content stream, certain objects, such as image XObjects, shall specify a colour
+    /// > space as an explicit parameter, often associated with the key ColorSpace. In this case,
+    /// > the colour space array or name shall always be defined directly as a PDF object, not by an
+    /// > entry in the ColorSpace resource subdictionary. This convention also applies when colour
+    /// > spaces are defined in terms of other colour spaces.
+    ///
+    /// So if resolving from outside, use [`Self::parse_object`] with empty content resources via
+    /// [`ContentResources::Empty`].
     pub(crate) fn resolve(
         value: &lopdf::content::Operation,
         content_resources: &ContentResources,
