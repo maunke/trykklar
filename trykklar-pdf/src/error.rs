@@ -137,6 +137,9 @@ pub enum Error {
     /// Int parsing error
     #[error("int parsing error")]
     IntParsing(#[from] TryFromIntError),
+    /// Multiple transformations on same object
+    #[error("multiple transformations on same object")]
+    MultipleTransformationsOnObject(ObjectId),
 }
 
 /// Object type Kind

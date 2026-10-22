@@ -3,6 +3,7 @@ mod cache;
 mod context;
 mod operator;
 mod state;
+mod transformation;
 pub mod write_operator;
 use crate::content::write_operator::{TryIntoOperation, WriteOperation};
 use crate::error::ResultExt;
@@ -23,6 +24,7 @@ pub(crate) use operator::TryFromOperands;
 pub use state::GraphicsState;
 use std::ops::Deref;
 use std::sync::Arc;
+pub use transformation::{Transformation, Transformations};
 
 /// Content Walker
 ///
