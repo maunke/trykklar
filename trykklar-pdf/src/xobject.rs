@@ -7,6 +7,7 @@ use crate::error::{
     Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResourceKind, ResultExt,
     ResultExtDeref,
 };
+use crate::extgstate::{NonStrokingAlpha, StrokingAlpha};
 use crate::geometry::Rect;
 use crate::optional_content::Oc;
 use crate::page::PdfPageId;
@@ -15,7 +16,7 @@ use crate::resources::{
 };
 use crate::stream::{FilterName, StreamFilter};
 use crate::unit::UserSpace;
-use crate::{Error, Matrix, Pdf, Result, object_id};
+use crate::{BlendMode, Error, GraphicsState, Matrix, Pdf, Result, SoftMask, object_id};
 use hayro_jpeg2000::ColorSpace as JpxColorSpace;
 use lopdf::content::Content;
 use lopdf::{Dictionary, Object, ObjectId, Stream};
@@ -207,6 +208,42 @@ impl<'a> FormXObject<'a> {
             content,
             group,
         })
+    }
+
+    /// Apply the transparency group effect on the initial graphics state in the form content.
+    ///
+    /// > The transparency group XObject’s content stream shall define the graphics objects
+    /// > belonging to the group. When applied to a transparency group XObject, the Do operator
+    /// > shall execute its content stream and shall composite the resulting group colour, shape,
+    /// > and opacity into the group’s parent group or page as if they had come from an elementary
+    /// > graphics object. Do shall perform the following actions in addition to the normal ones for
+    /// > a form XObject (as described in “Form XObjects”):
+    pub(crate) fn apply_to_graphics_state(&self, gs: &mut GraphicsState) {
+        let Some(group) = &self.group else {
+            return;
+        };
+
+        match group {
+            Ok(_) => {
+                // > Before execution of the transparency group XObject’s content stream, the current blend
+                // > mode in the graphics state shall be initialized to Normal, the current stroking and
+                // > nonstroking alpha constants to 1.0, and the current soft mask to None.
+                gs.blend_mode = Ok(BlendMode::Normal);
+                gs.stroking_alpha = Ok(StrokingAlpha::default());
+                gs.non_stroking_alpha = Ok(NonStrokingAlpha::default());
+                gs.soft_mask = Ok(SoftMask::None);
+            }
+            Err(e) => {
+                // As general approach in the crate: If there is a rule, but the
+                // GroupXObject can't be resolved correctly, then the error
+                // propagates to the graphics state instead of letting
+                // it be untouched. Lenient parsing, but not silent.
+                gs.blend_mode = Err(e.clone());
+                gs.stroking_alpha = Err(e.clone());
+                gs.non_stroking_alpha = Err(e.clone());
+                gs.soft_mask = Err(e.clone());
+            }
+        }
     }
 }
 

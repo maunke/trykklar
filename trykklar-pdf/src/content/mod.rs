@@ -394,6 +394,10 @@ impl<'a> ContentWalker<'a> {
             (Ok(parent), Ok(fc)) => Ok(parent.intersect(&fc)),
         };
         graphics_state.clipping_bbox = new_clip;
+
+        // transparency group handling
+        form.apply_to_graphics_state(&mut graphics_state);
+
         let oc_stack = match form.oc() {
             Some(oc) => vec![Ok(Some(oc.clone()))],
             None => vec![],
