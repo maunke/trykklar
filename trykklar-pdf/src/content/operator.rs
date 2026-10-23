@@ -125,6 +125,15 @@ pub enum Operator<'a> {
         /// ISO 32000-1:2008 8.5.3.3.3 Even-Odd Rule
         even_odd: bool,
     },
+    /// Compatibility Section
+    ///
+    /// ISO 32000-1:2008 Table 32
+    /// > `BX`: (PDF 1.1) Begin a compatibility section. Unrecognized operators (along with their
+    /// > operands) shall be ignored without error until the balancing EX operator is encountered.
+    BeginCompatilitySection,
+    /// > `EX`: (PDF 1.1) End a compatibility section begun by a balancing BX operator. Ignore any
+    /// > unrecognized operands and operators from previous matching BX onward.
+    EndCompatilitySection,
     /// Other operators not covered yet.
     Other {
         /// Key
@@ -393,6 +402,9 @@ impl<'a> Operator<'a> {
             // https://github.com/J-F-Liu/lopdf/issues/78
             // This has a low prio, since inline images are not used in packaging design context.
             "BI" | "ID" | "EI" => return Err(Error::InlineImageUnsupported),
+            // Table 32 - Compatibility Section
+            "BX" => Self::BeginCompatilitySection,
+            "EX" => Self::EndCompatilitySection,
             key => Self::Other {
                 key: key.to_string(),
                 operands: operands.clone(),
