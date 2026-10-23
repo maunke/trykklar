@@ -3,7 +3,7 @@
 
 use crate::codec::TryFromObject;
 use crate::color::{Color, ColorSpace, PatternColor};
-use crate::content::write_operator::{ModifyCtm, OperatorName, PAINT_XOBJECT_OPERATOR};
+use crate::content::write_operator::{ModifyCtm, OperatorName};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
 use crate::extgstate::{ExtGState, LineWidth};
@@ -143,7 +143,7 @@ impl<'a> Operator<'a> {
     ) -> Result<Self> {
         let operands = &operation.operands;
         let op = match operation.operator.as_str() {
-            PAINT_XOBJECT_OPERATOR => Self::PaintXObject(match &operands[..] {
+            "Do" => Self::PaintXObject(match &operands[..] {
                 [Object::Name(xobject_key)] => cache.xobject.get_or_resolve(xobject_key, || {
                     XObject::resolve(xobject_key, content_resources, pdf)
                 }),
