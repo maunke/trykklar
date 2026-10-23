@@ -392,7 +392,7 @@ impl<'a> Operator<'a> {
             // Inline Image Support is missing on lopdf for decoding and encoding
             // https://github.com/J-F-Liu/lopdf/issues/78
             // This has a low prio, since inline images are not used in packaging design context.
-            "BI" => return Err(Error::InlineImageUnsupported),
+            "BI" | "ID" | "EI" => return Err(Error::InlineImageUnsupported),
             key => Self::Other {
                 key: key.to_string(),
                 operands: operands.clone(),
