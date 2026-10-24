@@ -11,10 +11,11 @@ use crate::font::{CMapEncoding, FontKind};
 use crate::geometry::{BBox, CurrentPath, PathElement, Point};
 use crate::optional_content::Oc;
 use crate::page::{PdfPage, PdfPageId};
+use crate::pattern::TilingPatternId;
 use crate::resources::{ContentResources, ContentResourcesMut, PageResources};
 use crate::text::{CharSpace, ShowText, TextElement, TextLeading, WordSpace};
 use crate::unit::UserSpace;
-use crate::xobject::{FormXObject, XObject};
+use crate::xobject::{FormXObject, FormXObjectId, XObject};
 use crate::{Error, Length, Matrix, Pdf, Rect, Result, TilingPattern, UserUnit};
 pub(crate) use cache::{ResolvedCache, WalkerCache};
 pub use context::WalkerContext;
@@ -75,6 +76,19 @@ pub struct ContentWalker<'a> {
     depth: usize,
     // User Unit of the Page
     user_unit: Result<UserUnit>,
+    /// Tracks the stack of nested content, the walker traversed through
+    content_stack: Vec<ContentReference>,
+}
+
+/// Content Reference to the ID where the content walker traverses through.
+#[derive(Debug, Clone, Copy)]
+pub enum ContentReference {
+    /// Content from [`PdfPage`].
+    Page(PdfPageId),
+    /// Content from [`FormXObject`].
+    Form(FormXObjectId),
+    /// Content from [`TilingPattern`].
+    TilingPattern(TilingPatternId),
 }
 
 // Computes the bounding box of the current path.
@@ -97,6 +111,19 @@ impl<'a> ContentWalker<'a> {
     /// Returns the depth of the walker.
     pub fn depth(&self) -> usize {
         self.depth
+    }
+
+    /// Returns the nested content stack.
+    pub fn content_stack(&self) -> &[ContentReference] {
+        &self.content_stack
+    }
+
+    /// Returns the content reference of this walker.
+    pub fn content_reference(&self) -> ContentReference {
+        match self.content_stack.last() {
+            Some(r) => *r,
+            None => ContentReference::Page(self.page_id),
+        }
     }
 }
 
@@ -334,6 +361,7 @@ impl<'a> ContentWalker<'a> {
         let text_matrix = Ok(Matrix::IDENTITY);
         let line_matrix = Ok(Matrix::IDENTITY);
         let depth = 0;
+        let content_stack = vec![];
         Ok(Self {
             page_id: id,
             pdf,
@@ -356,6 +384,7 @@ impl<'a> ContentWalker<'a> {
             line_matrix,
             depth,
             user_unit,
+            content_stack,
         })
     }
 
@@ -414,6 +443,8 @@ impl<'a> ContentWalker<'a> {
         if depth > Self::MAX_DEPTH {
             return Err(Error::ContentWalkerDepthExceeded);
         }
+        let mut content_stack = self.content_stack.clone();
+        content_stack.push(ContentReference::Form(form.id()));
         Ok(Self {
             page_id: self.page_id,
             pdf: self.pdf,
@@ -436,6 +467,7 @@ impl<'a> ContentWalker<'a> {
             line_matrix,
             depth,
             user_unit: self.user_unit.clone(),
+            content_stack,
         })
     }
 
@@ -482,6 +514,8 @@ impl<'a> ContentWalker<'a> {
         if depth > Self::MAX_DEPTH {
             return Err(Error::ContentWalkerDepthExceeded);
         }
+        let mut content_stack = self.content_stack.clone();
+        content_stack.push(ContentReference::TilingPattern(tiling_pattern.id()));
         Ok(Self {
             page_id: self.page_id,
             pdf: self.pdf,
@@ -504,6 +538,7 @@ impl<'a> ContentWalker<'a> {
             line_matrix,
             depth,
             user_unit: self.user_unit.clone(),
+            content_stack,
         })
     }
 
