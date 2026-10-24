@@ -405,6 +405,16 @@ impl<'a> Operator<'a> {
             // Table 32 - Compatibility Section
             "BX" => Self::BeginCompatilitySection,
             "EX" => Self::EndCompatilitySection,
+            // Unparsed operators:
+            // - d
+            // - d0
+            // - d1
+            // - i
+            // - j
+            // - J
+            // - M
+            // - MP
+            // - ri
             key => Self::Other {
                 key: key.to_string(),
                 operands: operands.clone(),
