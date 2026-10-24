@@ -413,6 +413,7 @@ impl<'a> Operator<'a> {
             // - j
             // - J
             // - M
+            // - DP
             // - MP
             // - ri
             key => Self::Other {
