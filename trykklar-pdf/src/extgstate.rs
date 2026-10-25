@@ -34,6 +34,8 @@ pub struct ExtGState {
     pub(crate) line_cap_style: OptionalField<LineCapStyle>,
     // LJ
     pub(crate) line_join_style: OptionalField<LineJoinStyle>,
+    // ML
+    pub(crate) miter_limit: OptionalField<MiterLimit>,
 }
 
 impl ExtGState {
@@ -60,6 +62,7 @@ impl ExtGState {
                     let line_width = read_optional_field(pdf, extgstate_dict);
                     let line_cap_style = read_optional_field(pdf, extgstate_dict);
                     let line_join_style = read_optional_field(pdf, extgstate_dict);
+                    let miter_limit = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -72,6 +75,7 @@ impl ExtGState {
                         line_width,
                         line_cap_style,
                         line_join_style,
+                        miter_limit,
                     });
                 }
             }
@@ -150,6 +154,11 @@ impl ExtGState {
         // line join style
         if let Some(line_join_style) = self.line_join_style {
             gs.line_join_style = line_join_style;
+        }
+
+        // miter limit
+        if let Some(miter_limit) = self.miter_limit {
+            gs.miter_limit = miter_limit;
         }
     }
 }
@@ -576,6 +585,45 @@ impl TryFromObject<'_> for LineJoinStyle {
             _ => return Err(Error::InvalidPdfObject("Line join style must be 0, 1 or 2")),
         };
         Ok(style)
+    }
+}
+
+/// `/ML` Miter Limit
+///
+/// ISO 32000-1:2008 Table 58
+///
+/// > (Optional; PDF 1.3) The miter limit (see 8.4.3.5, "Miter Limit").
+///
+/// ISO 32000-1:2008 8.4.3.5 Miter Limit
+#[derive(Debug, Clone, Copy)]
+pub struct MiterLimit(f64);
+
+impl MiterLimit {
+    /// Returns the miter limit value.
+    pub fn get(&self) -> f64 {
+        self.0
+    }
+
+    pub(crate) fn new(value: f64) -> Self {
+        Self(value)
+    }
+}
+
+impl DictKey for MiterLimit {
+    const KEY: &'static [u8] = b"ML";
+}
+
+impl TryFromObject<'_> for MiterLimit {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let value = obj.as_f64()?;
+        if value < 1. {
+            return Err(Error::InvalidPdfObject("miter limit must be >= 1"));
+        }
+        Ok(Self(value))
     }
 }
 
