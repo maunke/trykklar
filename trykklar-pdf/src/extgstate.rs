@@ -30,6 +30,8 @@ pub struct ExtGState {
     pub(crate) non_stroking_alpha: OptionalField<NonStrokingAlpha>,
     // LW
     pub(crate) line_width: OptionalField<LineWidth>,
+    // LC
+    pub(crate) line_cap_style: OptionalField<LineCapStyle>,
 }
 
 impl ExtGState {
@@ -54,6 +56,7 @@ impl ExtGState {
                     let stroking_alpha = read_optional_field(pdf, extgstate_dict);
                     let non_stroking_alpha = read_optional_field(pdf, extgstate_dict);
                     let line_width = read_optional_field(pdf, extgstate_dict);
+                    let line_cap_style = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -64,6 +67,7 @@ impl ExtGState {
                         stroking_alpha,
                         non_stroking_alpha,
                         line_width,
+                        line_cap_style,
                     });
                 }
             }
@@ -132,6 +136,11 @@ impl ExtGState {
         // line width
         if let Some(line_width) = self.line_width {
             gs.line_width = line_width;
+        }
+
+        // line cap style
+        if let Some(line_cap_style) = self.line_cap_style {
+            gs.line_cap_style = line_cap_style;
         }
     }
 }
@@ -453,6 +462,57 @@ impl TryFromObject<'_> for LineWidth {
     ) -> Result<Self> {
         let width = obj.as_f64()?;
         Ok(Self(Length::from_raw(width)))
+    }
+}
+
+/// `/LC` Line Cap Style
+///
+/// ISO 32000-1:2008 Table 58
+///
+/// > (Optional; PDF 1.3) The line cap style (see 8.4.3.3, "Line Cap Style").
+///
+/// ISO 32000-1:2008 8.4.3.3 Line Cap Style
+///
+/// > The line cap style shall specify the shape that shall be used at the ends of open subpaths
+/// > (and dashes, if any) when they are stroked. Table 54 shows the possible values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineCapStyle {
+    /// `0`
+    ///
+    /// > Butt cap. The stroke shall be squared off at the endpoint of the path. There shall be no
+    /// > projection beyond the end of the path.
+    #[default]
+    Butt,
+    /// `1`
+    ///
+    /// > Round cap. A semicircular arc with a diameter equal to the line width shall be drawn
+    /// > around the endpoint and shall be filled in.
+    Round,
+    /// `2`
+    ///
+    /// > Projecting square cap. The stroke shall continue beyond the endpoint of the path for a
+    /// > distance equal to half the line width and shall be squared off.
+    ProjectingSquare,
+}
+
+impl DictKey for LineCapStyle {
+    const KEY: &'static [u8] = b"LC";
+}
+
+impl TryFromObject<'_> for LineCapStyle {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let value = obj.as_i64()?;
+        let style = match value {
+            0 => Self::Butt,
+            1 => Self::Round,
+            2 => Self::ProjectingSquare,
+            _ => return Err(Error::InvalidPdfObject("Line cap style must be 0, 1 or 2")),
+        };
+        Ok(style)
     }
 }
 

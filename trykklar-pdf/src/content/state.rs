@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::color::{Color, ColorSpace};
 use crate::extgstate::{
-    BlendMode, LineWidth, NonStrokingAlpha, OverprintMode, SoftMask, StrokingAlpha,
+    BlendMode, LineCapStyle, LineWidth, NonStrokingAlpha, OverprintMode, SoftMask, StrokingAlpha,
 };
 use crate::font::Font;
 use crate::geometry::BBox;
@@ -99,6 +99,7 @@ pub struct InnerGraphicsState<'a> {
     pub stroking_alpha: Result<StrokingAlpha>,
     pub non_stroking_alpha: Result<NonStrokingAlpha>,
     pub line_width: Result<LineWidth>,
+    pub line_cap_style: Result<LineCapStyle>,
 }
 
 impl Default for InnerGraphicsState<'_> {
@@ -117,6 +118,7 @@ impl Default for InnerGraphicsState<'_> {
             stroking_alpha: Ok(StrokingAlpha::default()),
             non_stroking_alpha: Ok(NonStrokingAlpha::default()),
             line_width: Ok(LineWidth::from_raw(1.0)),
+            line_cap_style: Ok(LineCapStyle::default()),
         }
     }
 }
@@ -135,5 +137,6 @@ impl InnerGraphicsState<'_> {
         self.non_stroking_alpha = Err(e.clone());
         self.text.font = Some(Err(e.clone()));
         self.text.font_size = Some(Err(e.clone()));
+        self.line_cap_style = Err(e.clone())
     }
 }
