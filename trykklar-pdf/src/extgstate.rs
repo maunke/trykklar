@@ -32,6 +32,8 @@ pub struct ExtGState {
     pub(crate) line_width: OptionalField<LineWidth>,
     // LC
     pub(crate) line_cap_style: OptionalField<LineCapStyle>,
+    // LJ
+    pub(crate) line_join_style: OptionalField<LineJoinStyle>,
 }
 
 impl ExtGState {
@@ -57,6 +59,7 @@ impl ExtGState {
                     let non_stroking_alpha = read_optional_field(pdf, extgstate_dict);
                     let line_width = read_optional_field(pdf, extgstate_dict);
                     let line_cap_style = read_optional_field(pdf, extgstate_dict);
+                    let line_join_style = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -68,6 +71,7 @@ impl ExtGState {
                         non_stroking_alpha,
                         line_width,
                         line_cap_style,
+                        line_join_style,
                     });
                 }
             }
@@ -141,6 +145,11 @@ impl ExtGState {
         // line cap style
         if let Some(line_cap_style) = self.line_cap_style {
             gs.line_cap_style = line_cap_style;
+        }
+
+        // line join style
+        if let Some(line_join_style) = self.line_join_style {
+            gs.line_join_style = line_join_style;
         }
     }
 }
@@ -511,6 +520,60 @@ impl TryFromObject<'_> for LineCapStyle {
             1 => Self::Round,
             2 => Self::ProjectingSquare,
             _ => return Err(Error::InvalidPdfObject("Line cap style must be 0, 1 or 2")),
+        };
+        Ok(style)
+    }
+}
+
+/// `/LJ` Line Join Style
+///
+/// ISO 32000-1:2008 Table 58
+///
+/// > (Optional; PDF 1.3) The line join style (see 8.4.3.4, "Line Join Style").
+///
+/// ISO 32000-1:2008 8.4.3.4 Line Join Style
+///
+/// > The line join style shall specify the shape to be used at the corners of paths that are
+/// > stroked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineJoinStyle {
+    /// `0`
+    ///
+    /// > Miter join. The outer edges of the strokes for the two segments shall be extended until
+    /// > they meet at an angle.
+    #[default]
+    Miter,
+    /// `1`
+    ///
+    /// > Round join. An arc of a circle with a diameter equal to the line width shall be drawn
+    /// > around the point where the two segments meet, connecting the outer edges of the strokes
+    /// > for the two segments. This pieslice-shaped figure shall be filled in, producing a rounded
+    /// > corner.
+    Round,
+    /// `2`
+    ///
+    /// > Bevel join. The two segments shall be finished with butt caps (see 8.4.3.3, "Line Cap
+    /// > Style") and the resulting notch beyond the ends of the segments shall be filled with a
+    /// > triangle.
+    Bevel,
+}
+
+impl DictKey for LineJoinStyle {
+    const KEY: &'static [u8] = b"LJ";
+}
+
+impl TryFromObject<'_> for LineJoinStyle {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let value = obj.as_i64()?;
+        let style = match value {
+            0 => Self::Miter,
+            1 => Self::Round,
+            2 => Self::Bevel,
+            _ => return Err(Error::InvalidPdfObject("Line join style must be 0, 1 or 2")),
         };
         Ok(style)
     }
