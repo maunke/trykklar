@@ -38,6 +38,8 @@ pub struct ExtGState {
     pub(crate) miter_limit: OptionalField<MiterLimit>,
     // RI
     pub(crate) rendering_intent: OptionalField<RenderingIntent>,
+    // FL
+    pub(crate) flatness_tolerance: OptionalField<FlatnessTolerance>,
 }
 
 impl ExtGState {
@@ -66,6 +68,7 @@ impl ExtGState {
                     let line_join_style = read_optional_field(pdf, extgstate_dict);
                     let miter_limit = read_optional_field(pdf, extgstate_dict);
                     let rendering_intent = read_optional_field(pdf, extgstate_dict);
+                    let flatness_tolerance = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -80,6 +83,7 @@ impl ExtGState {
                         line_join_style,
                         miter_limit,
                         rendering_intent,
+                        flatness_tolerance,
                     });
                 }
             }
@@ -168,6 +172,11 @@ impl ExtGState {
         // renderin intent
         if let Some(rendering_intent) = self.rendering_intent {
             gs.rendering_intent = rendering_intent;
+        }
+
+        // flatness tolerance
+        if let Some(flatness_tolerance) = self.flatness_tolerance {
+            gs.flatness_tolerance = flatness_tolerance;
         }
     }
 }
@@ -687,6 +696,52 @@ impl TryFromObject<'_> for RenderingIntent {
             _ => return Err(Error::InvalidPdfObject("rendering intent not correct")),
         };
         Ok(value)
+    }
+}
+
+/// `FL` Platness Tolerance
+///
+/// ISO 32000-1:2008 8.4.5, Table 58:
+///
+/// > (Optional; PDF 1.3) The flatness tolerance (see 10.6.2, "Flatness Tolerance").
+///
+/// ISO 32000-1:2008 10.6.2 Flatness Tolerance
+///
+/// > The flatness tolerance controls the maximum permitted distance in device pixels between the
+/// > mathematically correct path and an approximation constructed from straight line segments, as
+/// > shown in Figure 54.
+#[derive(Debug, Clone, Copy)]
+pub struct FlatnessTolerance(f64);
+
+impl FlatnessTolerance {
+    /// Returns the flatness tolerance value.
+    pub fn get(&self) -> f64 {
+        self.0
+    }
+
+    pub(crate) fn new(value: f64) -> Self {
+        Self(value)
+    }
+}
+
+impl DictKey for FlatnessTolerance {
+    const KEY: &'static [u8] = b"FL";
+}
+
+impl TryFromObject<'_> for FlatnessTolerance {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let value = obj.as_f64()?;
+        if value > 0. {
+            Ok(Self(value))
+        } else {
+            Err(Error::InvalidPdfObject(
+                "flatness tolerance must be a positive number",
+            ))
+        }
     }
 }
 
