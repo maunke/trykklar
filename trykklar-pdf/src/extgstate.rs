@@ -36,6 +36,8 @@ pub struct ExtGState {
     pub(crate) line_join_style: OptionalField<LineJoinStyle>,
     // ML
     pub(crate) miter_limit: OptionalField<MiterLimit>,
+    // RI
+    pub(crate) rendering_intent: OptionalField<RenderingIntent>,
 }
 
 impl ExtGState {
@@ -63,6 +65,7 @@ impl ExtGState {
                     let line_cap_style = read_optional_field(pdf, extgstate_dict);
                     let line_join_style = read_optional_field(pdf, extgstate_dict);
                     let miter_limit = read_optional_field(pdf, extgstate_dict);
+                    let rendering_intent = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -76,6 +79,7 @@ impl ExtGState {
                         line_cap_style,
                         line_join_style,
                         miter_limit,
+                        rendering_intent,
                     });
                 }
             }
@@ -159,6 +163,11 @@ impl ExtGState {
         // miter limit
         if let Some(miter_limit) = self.miter_limit {
             gs.miter_limit = miter_limit;
+        }
+
+        // renderin intent
+        if let Some(rendering_intent) = self.rendering_intent {
+            gs.rendering_intent = rendering_intent;
         }
     }
 }
@@ -624,6 +633,60 @@ impl TryFromObject<'_> for MiterLimit {
             return Err(Error::InvalidPdfObject("miter limit must be >= 1"));
         }
         Ok(Self(value))
+    }
+}
+
+/// `RI` Rendering Intents
+///
+/// ISO 32000-1:2008 8.4.5, Table 58:
+///
+/// > (Optional; PDF 1.3) The name of the rendering intent (see 8.6.5.8, "Rendering Intents").
+///
+/// ISO 32000-1:2008 8.6.5.8 Rendering Intents
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RenderingIntent {
+    /// `AbsoluteColorimetric`
+    ///
+    /// > Colours shall be represented solely with respect to the light source; no correction shall
+    /// > be made for the output medium’s white point (such as the colour of unprinted paper).
+    AbsoluteColorimetric,
+    /// `RelativeColorimetric`
+    ///
+    /// > Colours shall be represented with respect to the combination of the light source and the
+    /// > output medium’s white point (such as the colour of unprinted paper).
+    #[default]
+    RelativeColorimetric,
+    /// `Saturation`
+    ///
+    /// > Colours shall be represented in a manner that preserves or emphasizes saturation.
+    /// > Reproduction of in-gamut colours may or may not be colourimetrically accurate.
+    Saturation,
+    /// `Perceptual`
+    ///
+    /// > Colours shall be represented in a manner that provides a pleasing perceptual appearance.
+    /// > To preserve colour relationships, both in-gamut and out-of-gamut colours shall be
+    /// > generally modified from their precise colourimetric values.
+    Perceptual,
+}
+
+impl DictKey for RenderingIntent {
+    const KEY: &'static [u8] = b"RI";
+}
+
+impl TryFromObject<'_> for RenderingIntent {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let value = match obj.as_name()? {
+            b"AbsoluteColorimetric" => Self::AbsoluteColorimetric,
+            b"RelativeColorimetric" => Self::RelativeColorimetric,
+            b"Saturation" => Self::Saturation,
+            b"Perceptual" => Self::Perceptual,
+            _ => return Err(Error::InvalidPdfObject("rendering intent not correct")),
+        };
+        Ok(value)
     }
 }
 

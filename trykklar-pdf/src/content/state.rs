@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::color::{Color, ColorSpace};
 use crate::extgstate::{
     BlendMode, LineCapStyle, LineJoinStyle, LineWidth, MiterLimit, NonStrokingAlpha, OverprintMode,
-    SoftMask, StrokingAlpha,
+    RenderingIntent, SoftMask, StrokingAlpha,
 };
 use crate::font::Font;
 use crate::geometry::BBox;
@@ -103,6 +103,7 @@ pub struct InnerGraphicsState<'a> {
     pub line_cap_style: Result<LineCapStyle>,
     pub line_join_style: Result<LineJoinStyle>,
     pub miter_limit: Result<MiterLimit>,
+    pub rendering_intent: Result<RenderingIntent>,
 }
 
 impl Default for InnerGraphicsState<'_> {
@@ -124,6 +125,7 @@ impl Default for InnerGraphicsState<'_> {
             line_cap_style: Ok(LineCapStyle::default()),
             line_join_style: Ok(LineJoinStyle::default()),
             miter_limit: Ok(MiterLimit::new(10.0)),
+            rendering_intent: Ok(RenderingIntent::default()),
         }
     }
 }
@@ -145,5 +147,6 @@ impl InnerGraphicsState<'_> {
         self.line_cap_style = Err(e.clone());
         self.line_join_style = Err(e.clone());
         self.miter_limit = Err(e.clone());
+        self.rendering_intent = Err(e.clone());
     }
 }
