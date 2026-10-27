@@ -8,6 +8,7 @@ use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
 use crate::extgstate::{
     ExtGState, FlatnessTolerance, LineCapStyle, LineDashPattern, LineJoinStyle, LineWidth,
+    MiterLimit,
 };
 use crate::font::Font;
 use crate::geometry::{
@@ -50,6 +51,8 @@ pub enum Operator<'a> {
     SetLineJoinStyle(Result<LineJoinStyle>),
     /// > `J`: Set line cap style
     SetLineCapStyle(Result<LineCapStyle>),
+    /// > `M`: Set miter limit
+    SetMiterLimit(Result<MiterLimit>),
     /// Paint Path Operator
     ///
     /// Covering ISO 32000-1:2008 8.5.3 Table 60 - "Path-Painting Operators" operators.
@@ -194,6 +197,10 @@ impl<'a> Operator<'a> {
             }),
             "J" => Self::SetLineCapStyle(match &operands[..] {
                 [obj] => LineCapStyle::try_from_object(pdf, None, obj),
+                _ => Err(Error::InvalidOperands),
+            }),
+            "M" => Self::SetMiterLimit(match &operands[..] {
+                [obj] => MiterLimit::try_from_object(pdf, None, obj),
                 _ => Err(Error::InvalidOperands),
             }),
             // 8.6.8 Table 74 - Colour Operators
@@ -435,7 +442,6 @@ impl<'a> Operator<'a> {
             // Unparsed operators:
             // - d0
             // - d1
-            // - M
             // - DP
             // - MP
             // - ri
