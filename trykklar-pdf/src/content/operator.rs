@@ -118,6 +118,9 @@ pub enum Operator<'a> {
         /// optional content tag
         oc: Result<Option<Result<Oc>>>,
     },
+    /// > `DP`: (PDF 1.2) Define marked-content point with property list
+    /// > `MP`: (PDF 1.2) Define marked-content point
+    MarkedContentPoint,
     /// > `EMC`: (PDF 1.2) End marked-content sequence
     EndMarkedContent,
     /// > `BT`: Begin text object
@@ -150,13 +153,15 @@ pub enum Operator<'a> {
     /// > `EX`: (PDF 1.1) End a compatibility section begun by a balancing BX operator. Ignore any
     /// > unrecognized operands and operators from previous matching BX onward.
     EndCompatilitySection,
-    /// Other operators not covered yet.
-    Other {
-        /// Key
-        key: String,
-        /// Operands
-        operands: Vec<Object>,
-    },
+    /// ISO 32000-1:2008 Table 113 Type 3 font operators
+    /// > `d0`: Set glyph width in Type 3 font
+    ///
+    /// This operator is just a marker as of now.
+    SetGlyphWidth,
+    /// > `d1`: Set glyph width and bounding box in Type 3 font
+    ///
+    /// This operator is just a marker as of now.
+    SetGlyphWidthAndBBox,
 }
 
 impl<'a> Operator<'a> {
@@ -209,6 +214,9 @@ impl<'a> Operator<'a> {
                 [obj] => RenderingIntent::try_from_object(pdf, None, obj),
                 _ => Err(Error::InvalidOperands),
             }),
+            // 9.6.5 Table 113 - Type 3 font operators
+            "d0" => Self::SetGlyphWidth,
+            "d1" => Self::SetGlyphWidthAndBBox,
             // 8.6.8 Table 74 - Colour Operators
             "CS" => {
                 let cs =
@@ -407,7 +415,7 @@ impl<'a> Operator<'a> {
             "Tm" => Self::SetTextMatrix(Matrix::try_from_operands(operands)),
             // 14.6.1 Table 320 - Marked Content Operators
             // Only OC relevant information is considered
-            // excluded: MP, DP
+            "DP" | "MP" => Self::MarkedContentPoint,
             "BMC" => Self::BeginMarkedContent { oc: Ok(None) },
             "BDC" => {
                 let oc = match &operands[..] {
@@ -445,15 +453,7 @@ impl<'a> Operator<'a> {
             // Table 32 - Compatibility Section
             "BX" => Self::BeginCompatilitySection,
             "EX" => Self::EndCompatilitySection,
-            // Unparsed operators:
-            // - d0
-            // - d1
-            // - DP
-            // - MP
-            key => Self::Other {
-                key: key.to_string(),
-                operands: operands.clone(),
-            },
+            _ => return Err(Error::InvalidOperator),
         };
         Ok(op)
     }
