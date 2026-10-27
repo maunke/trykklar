@@ -751,6 +751,9 @@ impl<'a> ContentWalker<'a> {
                 self.graphics_state.line_cap_style = line_cap_style
             }
             Operator::SetMiterLimit(miter_limit) => self.graphics_state.miter_limit = miter_limit,
+            Operator::SetRenderingIntent(rendering_intent) => {
+                self.graphics_state.rendering_intent = rendering_intent
+            }
             Operator::SetTextRenderMode(mode) => self.graphics_state.text.mode = mode,
             Operator::SetFontSize { font, size } => {
                 self.graphics_state.text.font_size = Some(size);
