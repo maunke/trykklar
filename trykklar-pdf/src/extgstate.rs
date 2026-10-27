@@ -40,6 +40,8 @@ pub struct ExtGState {
     pub(crate) rendering_intent: OptionalField<RenderingIntent>,
     // FL
     pub(crate) flatness_tolerance: OptionalField<FlatnessTolerance>,
+    // D
+    pub(crate) line_dash_pattern: OptionalField<LineDashPattern>,
 }
 
 impl ExtGState {
@@ -69,6 +71,7 @@ impl ExtGState {
                     let miter_limit = read_optional_field(pdf, extgstate_dict);
                     let rendering_intent = read_optional_field(pdf, extgstate_dict);
                     let flatness_tolerance = read_optional_field(pdf, extgstate_dict);
+                    let line_dash_pattern = read_optional_field(pdf, extgstate_dict);
                     return Ok(Self {
                         overprint,
                         non_stroking_overprint,
@@ -84,6 +87,7 @@ impl ExtGState {
                         miter_limit,
                         rendering_intent,
                         flatness_tolerance,
+                        line_dash_pattern,
                     });
                 }
             }
@@ -177,6 +181,11 @@ impl ExtGState {
         // flatness tolerance
         if let Some(flatness_tolerance) = self.flatness_tolerance {
             gs.flatness_tolerance = flatness_tolerance;
+        }
+
+        // line dash pattern
+        if let Some(line_dash_pattern) = self.line_dash_pattern {
+            gs.line_dash_pattern = line_dash_pattern;
         }
     }
 }
@@ -642,6 +651,90 @@ impl TryFromObject<'_> for MiterLimit {
             return Err(Error::InvalidPdfObject("miter limit must be >= 1"));
         }
         Ok(Self(value))
+    }
+}
+
+/// `D` Line Dash Pattern
+///
+/// ISO 32000-1:2008 8.4.5, Table 58:
+///
+/// > (Optional; PDF 1.3) The line dash pattern, expressed as an array of the form [ dashArray
+/// > dashPhase ], where dashArray shall be itself an array and dashPhase shall be an integer (see
+/// > 8.4.3.6, "Line Dash Pattern").
+///
+/// ISO 32000-1:2008 8.4.3.6 Line Dash Pattern
+#[derive(Debug, Clone)]
+pub struct LineDashPattern {
+    dash_array: Vec<Length<UserSpace>>,
+    phase: Length<UserSpace>,
+}
+
+impl Default for LineDashPattern {
+    fn default() -> Self {
+        Self::SOLID_LINE
+    }
+}
+
+impl LineDashPattern {
+    const SOLID_LINE: Self = Self {
+        dash_array: vec![],
+        phase: Length::ZERO,
+    };
+
+    /// Creates a new line dash pattern.
+    pub fn try_new(array_object: &Object, phase_object: &Object) -> Result<Self> {
+        let dash_array = array_object
+            .as_array()?
+            .iter()
+            .map(|a| {
+                let val = a.as_f64()?;
+                if val < 0. {
+                    Err(Error::InvalidPdfObject(
+                        "line dash pattern arr element must be nonnegative",
+                    ))
+                } else {
+                    Ok(Length::from_raw(val))
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if dash_array.iter().map(|v| v.get()).sum::<f64>() == 0. {
+            return Err(Error::InvalidPdfObject(
+                "in line dash pattern array at least one element must be non zero",
+            ));
+        };
+        let dash_phase = Length::from_raw(phase_object.as_f64()?);
+        Ok(Self {
+            dash_array,
+            phase: dash_phase,
+        })
+    }
+    /// Returns the dash array.
+    pub fn dash_array(&self) -> &[Length<UserSpace>] {
+        &self.dash_array
+    }
+
+    /// Returns the dash phase.
+    pub fn phase(&self) -> Length<UserSpace> {
+        self.phase
+    }
+}
+
+impl DictKey for LineDashPattern {
+    const KEY: &'static [u8] = b"D";
+}
+
+impl TryFromObject<'_> for LineDashPattern {
+    fn try_from_object(
+        _pdf: &'_ Pdf,
+        _id: Option<lopdf::ObjectId>,
+        obj: &'_ Object,
+    ) -> Result<Self> {
+        let [ref arr, ref phase] = obj.as_array()?[..] else {
+            return Err(Error::InvalidPdfObject(
+                "line dash pattern must be of size 2",
+            ));
+        };
+        Self::try_new(arr, phase)
     }
 }
 

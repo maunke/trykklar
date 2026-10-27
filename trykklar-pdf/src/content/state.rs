@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use crate::color::{Color, ColorSpace};
 use crate::extgstate::{
-    BlendMode, FlatnessTolerance, LineCapStyle, LineJoinStyle, LineWidth, MiterLimit,
-    NonStrokingAlpha, OverprintMode, RenderingIntent, SoftMask, StrokingAlpha,
+    BlendMode, FlatnessTolerance, LineCapStyle, LineDashPattern, LineJoinStyle, LineWidth,
+    MiterLimit, NonStrokingAlpha, OverprintMode, RenderingIntent, SoftMask, StrokingAlpha,
 };
 use crate::font::Font;
 use crate::geometry::BBox;
@@ -105,6 +105,7 @@ pub struct InnerGraphicsState<'a> {
     pub miter_limit: Result<MiterLimit>,
     pub rendering_intent: Result<RenderingIntent>,
     pub flatness_tolerance: Result<FlatnessTolerance>,
+    pub line_dash_pattern: Result<LineDashPattern>,
 }
 
 impl Default for InnerGraphicsState<'_> {
@@ -128,6 +129,7 @@ impl Default for InnerGraphicsState<'_> {
             miter_limit: Ok(MiterLimit::new(10.0)),
             rendering_intent: Ok(RenderingIntent::default()),
             flatness_tolerance: Ok(FlatnessTolerance::new(1.0)),
+            line_dash_pattern: Ok(LineDashPattern::default()),
         }
     }
 }
@@ -151,5 +153,6 @@ impl InnerGraphicsState<'_> {
         self.miter_limit = Err(e.clone());
         self.rendering_intent = Err(e.clone());
         self.flatness_tolerance = Err(e.clone());
+        self.line_dash_pattern = Err(e.clone());
     }
 }
