@@ -744,6 +744,9 @@ impl<'a> ContentWalker<'a> {
             Operator::SetFlatnessTolerance(flatness_tolerance) => {
                 self.graphics_state.flatness_tolerance = flatness_tolerance
             }
+            Operator::SetLineJoinStyle(line_join_style) => {
+                self.graphics_state.line_join_style = line_join_style
+            }
             Operator::SetTextRenderMode(mode) => self.graphics_state.text.mode = mode,
             Operator::SetFontSize { font, size } => {
                 self.graphics_state.text.font_size = Some(size);
