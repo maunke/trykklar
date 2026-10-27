@@ -738,6 +738,9 @@ impl<'a> ContentWalker<'a> {
                 }
                 e => self.graphics_state.ctm = e.clone(),
             },
+            Operator::SetLineDashPattern(line_dash_pattern) => {
+                self.graphics_state.line_dash_pattern = line_dash_pattern
+            }
             Operator::SetTextRenderMode(mode) => self.graphics_state.text.mode = mode,
             Operator::SetFontSize { font, size } => {
                 self.graphics_state.text.font_size = Some(size);

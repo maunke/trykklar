@@ -6,7 +6,7 @@ use crate::color::{Color, ColorSpace, PatternColor};
 use crate::content::write_operator::{ModifyCtm, OperatorName};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
-use crate::extgstate::{ExtGState, LineWidth};
+use crate::extgstate::{ExtGState, LineDashPattern, LineWidth};
 use crate::font::Font;
 use crate::geometry::{
     CurveTo, CurveToControlCurrentTwo, CurveToControlOneThree, LineTo, MoveTo, PathElement,
@@ -31,6 +31,7 @@ use lopdf::Object;
 /// ISO 32000-1:2008 Table A.1 – PDF content stream operators
 #[derive(Debug, Clone)]
 pub enum Operator<'a> {
+    // Table 57 - Graphics State Operators
     /// > `q`: Save graphics state
     SaveGraphicsState,
     /// > `Q`: Restore graphics state
@@ -39,6 +40,8 @@ pub enum Operator<'a> {
     SetExtGState(Box<Result<ExtGState>>),
     /// > `cm`: Concatenate matrix to current transformation matrix
     ModifyCtm(Result<Matrix>),
+    /// > `d`: Set line dash pattern
+    SetLineDashPattern(Result<LineDashPattern>),
     /// Paint Path Operator
     ///
     /// Covering ISO 32000-1:2008 8.5.3 Table 60 - "Path-Painting Operators" operators.
@@ -167,6 +170,10 @@ impl<'a> Operator<'a> {
             }
             "w" => Self::SetLineWidth(match &operands[..] {
                 [w_obj] => LineWidth::try_from_object(pdf, None, w_obj),
+                _ => Err(Error::InvalidOperands),
+            }),
+            "d" => Self::SetLineDashPattern(match &operands[..] {
+                [arr, phase] => LineDashPattern::try_new(arr, phase),
                 _ => Err(Error::InvalidOperands),
             }),
             // 8.6.8 Table 74 - Colour Operators
@@ -406,7 +413,6 @@ impl<'a> Operator<'a> {
             "BX" => Self::BeginCompatilitySection,
             "EX" => Self::EndCompatilitySection,
             // Unparsed operators:
-            // - d
             // - d0
             // - d1
             // - i
