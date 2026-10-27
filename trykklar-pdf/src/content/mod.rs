@@ -747,6 +747,9 @@ impl<'a> ContentWalker<'a> {
             Operator::SetLineJoinStyle(line_join_style) => {
                 self.graphics_state.line_join_style = line_join_style
             }
+            Operator::SetLineCapStyle(line_cap_style) => {
+                self.graphics_state.line_cap_style = line_cap_style
+            }
             Operator::SetTextRenderMode(mode) => self.graphics_state.text.mode = mode,
             Operator::SetFontSize { font, size } => {
                 self.graphics_state.text.font_size = Some(size);

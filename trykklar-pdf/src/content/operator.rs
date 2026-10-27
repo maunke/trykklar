@@ -6,7 +6,9 @@ use crate::color::{Color, ColorSpace, PatternColor};
 use crate::content::write_operator::{ModifyCtm, OperatorName};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
-use crate::extgstate::{ExtGState, FlatnessTolerance, LineDashPattern, LineJoinStyle, LineWidth};
+use crate::extgstate::{
+    ExtGState, FlatnessTolerance, LineCapStyle, LineDashPattern, LineJoinStyle, LineWidth,
+};
 use crate::font::Font;
 use crate::geometry::{
     CurveTo, CurveToControlCurrentTwo, CurveToControlOneThree, LineTo, MoveTo, PathElement,
@@ -46,6 +48,8 @@ pub enum Operator<'a> {
     SetFlatnessTolerance(Result<FlatnessTolerance>),
     /// > `j`: Set line join style
     SetLineJoinStyle(Result<LineJoinStyle>),
+    /// > `J`: Set line cap style
+    SetLineCapStyle(Result<LineCapStyle>),
     /// Paint Path Operator
     ///
     /// Covering ISO 32000-1:2008 8.5.3 Table 60 - "Path-Painting Operators" operators.
@@ -186,6 +190,10 @@ impl<'a> Operator<'a> {
             }),
             "j" => Self::SetLineJoinStyle(match &operands[..] {
                 [obj] => LineJoinStyle::try_from_object(pdf, None, obj),
+                _ => Err(Error::InvalidOperands),
+            }),
+            "J" => Self::SetLineCapStyle(match &operands[..] {
+                [obj] => LineCapStyle::try_from_object(pdf, None, obj),
                 _ => Err(Error::InvalidOperands),
             }),
             // 8.6.8 Table 74 - Colour Operators
@@ -427,7 +435,6 @@ impl<'a> Operator<'a> {
             // Unparsed operators:
             // - d0
             // - d1
-            // - J
             // - M
             // - DP
             // - MP
