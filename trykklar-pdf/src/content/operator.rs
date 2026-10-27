@@ -6,7 +6,7 @@ use crate::color::{Color, ColorSpace, PatternColor};
 use crate::content::write_operator::{ModifyCtm, OperatorName};
 use crate::content::{ResolvedCache, WalkerCache};
 use crate::error::{ResourceKind, ResultExt};
-use crate::extgstate::{ExtGState, LineDashPattern, LineWidth};
+use crate::extgstate::{ExtGState, FlatnessTolerance, LineDashPattern, LineWidth};
 use crate::font::Font;
 use crate::geometry::{
     CurveTo, CurveToControlCurrentTwo, CurveToControlOneThree, LineTo, MoveTo, PathElement,
@@ -42,6 +42,8 @@ pub enum Operator<'a> {
     ModifyCtm(Result<Matrix>),
     /// > `d`: Set line dash pattern
     SetLineDashPattern(Result<LineDashPattern>),
+    /// > `i`: Set flatness tolerance
+    SetFlatnessTolerance(Result<FlatnessTolerance>),
     /// Paint Path Operator
     ///
     /// Covering ISO 32000-1:2008 8.5.3 Table 60 - "Path-Painting Operators" operators.
@@ -174,6 +176,10 @@ impl<'a> Operator<'a> {
             }),
             "d" => Self::SetLineDashPattern(match &operands[..] {
                 [arr, phase] => LineDashPattern::try_new(arr, phase),
+                _ => Err(Error::InvalidOperands),
+            }),
+            "i" => Self::SetFlatnessTolerance(match &operands[..] {
+                [obj] => FlatnessTolerance::try_from_object(pdf, None, obj),
                 _ => Err(Error::InvalidOperands),
             }),
             // 8.6.8 Table 74 - Colour Operators
@@ -415,7 +421,6 @@ impl<'a> Operator<'a> {
             // Unparsed operators:
             // - d0
             // - d1
-            // - i
             // - j
             // - J
             // - M
