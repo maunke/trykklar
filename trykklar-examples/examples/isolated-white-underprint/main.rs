@@ -62,7 +62,7 @@ impl WalkerProcessor for IsolatedWhiteUnderprints {
         // painted in isolated group and with white colorant
         let mut in_isolated_form = step.content_stack().iter().rev().filter_map(|c| {
             if let ContentReference::Form(form_id) = c
-                && self.isolated_groups.contains(&form_id)
+                && self.isolated_groups.contains(form_id)
             {
                 Some(true)
             } else {
@@ -74,7 +74,7 @@ impl WalkerProcessor for IsolatedWhiteUnderprints {
             match step.painted_color_spaces() {
                 Ok(color_spaces) => {
                     color_spaces.colorant_names().iter().for_each(|c| {
-                        if self.white_color_names.contains(&c) {
+                        if self.white_color_names.contains(c) {
                             self.findings += 1;
                         }
                     });
