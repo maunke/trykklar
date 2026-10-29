@@ -112,19 +112,6 @@ impl<'a> ContentWalker<'a> {
     pub fn depth(&self) -> usize {
         self.depth
     }
-
-    /// Returns the nested content stack.
-    pub fn content_stack(&self) -> &[ContentReference] {
-        &self.content_stack
-    }
-
-    /// Returns the content reference of this walker.
-    pub fn content_reference(&self) -> ContentReference {
-        match self.content_stack.last() {
-            Some(r) => *r,
-            None => ContentReference::Page(self.page_id),
-        }
-    }
 }
 
 /// Content Walker Step
@@ -145,6 +132,7 @@ pub struct ContentWalkerStep<'a> {
     oc_levels: Vec<Result<Oc>>,
     tiled_region: Option<Result<BBox<UserSpace>>>,
     user_unit: Result<UserUnit>,
+    content_stack: Vec<ContentReference>,
 }
 
 impl<'a> From<ContentWalkerStep<'a>> for WriteOperation {
@@ -231,6 +219,19 @@ impl<'a> ContentWalkerStep<'a> {
     /// Whether this step walks within a tiling pattern.
     pub fn is_tiled(&self) -> bool {
         self.tiled_region.is_some()
+    }
+
+    /// Returns the nested content stack.
+    pub fn content_stack(&self) -> &[ContentReference] {
+        &self.content_stack
+    }
+
+    /// Returns the content reference of this walker.
+    pub fn content_reference(&self) -> ContentReference {
+        match self.content_stack.last() {
+            Some(r) => *r,
+            None => ContentReference::Page(self.page_id),
+        }
     }
 
     fn clip_bbox(&self, bbox: &Result<BBox<UserSpace>>) -> Result<BBox<UserSpace>> {
@@ -893,6 +894,7 @@ impl<'a> ContentWalker<'a> {
             line_matrix: self.line_matrix.clone(),
             tiled_region: self.tiled_region.clone(),
             user_unit: self.user_unit.clone(),
+            content_stack: self.content_stack.clone(),
         };
 
         if is_painting {
