@@ -56,32 +56,17 @@ impl WalkerProcessor for IsolatedWhiteUnderprints {
         }
 
         // painted in isolated group and with white colorant
-        //
-        // first get the next form id this operator belongs to, e.g. if used in tiling pattern, that
-        // is painted in a form
-        let form_id = match step.content_reference() {
-            ContentReference::Form(form_id) => form_id,
-            ContentReference::TilingPattern(_) => {
-                let form_id = step
-                    .content_stack()
-                    .iter()
-                    .rev()
-                    .filter_map(|c| {
-                        if let ContentReference::Form(form_id) = c {
-                            Some(form_id)
-                        } else {
-                            None
-                        }
-                    })
-                    .next();
-                let Some(form_id) = form_id else {
-                    return;
-                };
-                *form_id
+        let mut in_isolated_form = step.content_stack().iter().rev().filter_map(|c| {
+            if let ContentReference::Form(form_id) = c
+                && self.isolated_groups.contains(&form_id)
+            {
+                Some(true)
+            } else {
+                None
             }
-            _ => return,
-        };
-        if self.isolated_groups.contains(&form_id) {
+        });
+
+        if in_isolated_form.next().is_some() {
             match step.painted_color_spaces() {
                 Ok(color_spaces) => {
                     if color_spaces.colorant_names().contains(&self.white) {
