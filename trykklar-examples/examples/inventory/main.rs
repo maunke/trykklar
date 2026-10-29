@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use trykklar::inventory::page::{ColorSpacesInventory, ImagesInventory};
+use trykklar::inventory::step::ColorSpaceColorantNames;
 use trykklar::pdf::Mm;
 use trykklar::{PageWalker, Pdf};
 
@@ -40,7 +41,7 @@ fn main() -> Result<()> {
             println!("- {:?}", cs);
         }
         println!("\nThe following colorant names were used:\n");
-        for colorant_name in colorspaces_inventory.colorant_names() {
+        for colorant_name in colorspaces_inventory.color_spaces().colorant_names() {
             println!("- {:?}", colorant_name);
         }
 

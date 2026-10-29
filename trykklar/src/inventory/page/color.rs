@@ -1,6 +1,6 @@
 use crate::WalkerProcessor;
-use pdf::color::ColorantName;
-use pdf::{Color, ColorSpace, Operator};
+use crate::inventory::step::PaintedColorSpaces;
+use pdf::ColorSpace;
 use std::collections::HashSet;
 
 /// The set all all color spaces painted on a page.
@@ -25,144 +25,17 @@ impl ColorSpacesInventory {
     pub fn inderterminate(&self) -> usize {
         self.inderterminate
     }
-
-    /// Returns the set of colorant names.
-    pub fn colorant_names(&self) -> HashSet<ColorantName> {
-        let mut set = HashSet::new();
-        for cs in &self.color_spaces {
-            self.resolve_colorant_name_from_cs(cs, &mut set);
-        }
-        set
-    }
-
-    fn resolve_colorant_name_from_cs(&self, cs: &ColorSpace, set: &mut HashSet<ColorantName>) {
-        match cs {
-            ColorSpace::Separation(separation) => {
-                set.insert(separation.name().clone());
-            }
-            ColorSpace::DeviceN(device_n) => {
-                for name in device_n.names() {
-                    set.insert(name.clone());
-                }
-            }
-            ColorSpace::Indexed(indexed) => {
-                self.resolve_colorant_name_from_cs(indexed.base(), set);
-            }
-            ColorSpace::Pattern(Some(colorspace)) => {
-                self.resolve_colorant_name_from_cs(colorspace, set);
-            }
-            _ => {}
-        }
-    }
-
-    fn register_paint(&mut self, cs: &pdf::Result<ColorSpace>, color: &pdf::Result<Color>) {
-        if let Ok(Color::Pattern(pdf::PatternColor::Shading(shading_pattern))) = color {
-            match shading_pattern.shading() {
-                Ok(shading) => match shading.color_space() {
-                    Ok(color_space) => {
-                        self.color_spaces.insert(color_space.clone());
-                    }
-                    Err(_) => self.inderterminate += 1,
-                },
-                Err(_) => self.inderterminate += 1,
-            }
-            return;
-        }
-        match cs {
-            Ok(ColorSpace::Pattern(Some(color_space))) => {
-                self.color_spaces.insert((**color_space).clone());
-            }
-            Ok(ColorSpace::Pattern(None)) => {}
-            Ok(color_space) => {
-                self.color_spaces.insert(color_space.clone());
-            }
-            Err(_) => self.inderterminate += 1,
-        };
-    }
 }
 
 impl WalkerProcessor for ColorSpacesInventory {
     fn process(&mut self, step: &pdf::ContentWalkerStep) {
-        let gs = step.graphics_state();
-        // check if painted bbox is ok and empty
-        match step.painted_bbox() {
-            Ok(painted_bbox) if painted_bbox.is_empty() => return,
-            Err(_) => {
-                self.inderterminate += 1;
-                return;
+        match step.painted_color_spaces() {
+            Ok(color_spaces) => {
+                color_spaces.iter().for_each(|cs| {
+                    self.color_spaces.insert(cs.clone());
+                });
             }
-            _ => (),
-        };
-        // Match for graphics objects
-        match step.operator() {
-            Operator::PaintPath { fill, stroke } => {
-                if *fill {
-                    match gs.non_stroking_alpha {
-                        Ok(alpha) if alpha.get() > 0. => self
-                            .register_paint(&gs.non_stroking.color_space, &gs.non_stroking.color),
-                        Err(_) => self.inderterminate += 1,
-                        _ => (),
-                    };
-                }
-                if *stroke {
-                    match gs.stroking_alpha {
-                        Ok(alpha) if alpha.get() > 0. => {
-                            self.register_paint(&gs.stroking.color_space, &gs.stroking.color)
-                        }
-                        Err(_) => self.inderterminate += 1,
-                        _ => (),
-                    };
-                }
-            }
-            Operator::ShowText(_) => {
-                let (fill, stroke) = match gs.text.mode {
-                    Ok(text_mode) => (text_mode.fills(), text_mode.strokes()),
-                    Err(_) => {
-                        self.inderterminate += 1;
-                        return;
-                    }
-                };
-                if fill {
-                    match gs.non_stroking_alpha {
-                        Ok(alpha) if alpha.get() > 0. => self
-                            .register_paint(&gs.non_stroking.color_space, &gs.non_stroking.color),
-                        Err(_) => self.inderterminate += 1,
-                        _ => (),
-                    };
-                }
-                if stroke {
-                    match gs.stroking_alpha {
-                        Ok(alpha) if alpha.get() > 0. => {
-                            self.register_paint(&gs.stroking.color_space, &gs.stroking.color)
-                        }
-                        Err(_) => self.inderterminate += 1,
-                        _ => (),
-                    };
-                }
-            }
-            Operator::PaintShading(shading) => match shading {
-                Ok(s) => match s.color_space() {
-                    Ok(color_space) => {
-                        self.color_spaces.insert(color_space.clone());
-                    }
-                    Err(_) => self.inderterminate += 1,
-                },
-                Err(_) => self.inderterminate += 1,
-            },
-            Operator::PaintXObject(xobject) => match xobject {
-                Ok(pdf::XObject::Image(image)) => match image.kind() {
-                    Ok(pdf::ImageKind::Sampled { colorspace }) => {
-                        self.color_spaces.insert(colorspace.clone());
-                    }
-                    Ok(pdf::ImageKind::Mask) => {
-                        self.register_paint(&gs.non_stroking.color_space, &gs.non_stroking.color)
-                    }
-                    Err(_) => self.inderterminate += 1,
-                },
-                Ok(_) => {}
-                Err(_) => self.inderterminate += 1,
-            },
-            _ => (),
+            Err(_) => self.inderterminate += 1,
         }
     }
 }
