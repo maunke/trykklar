@@ -48,13 +48,13 @@ impl<'a> Pattern<'a> {
                 let pattern_dict = pattern_dict_obj.as_dict()?;
                 if let Ok(pattern_obj_ref) = pattern_dict.get(pattern_key) {
                     let (opt_obj_id, pattern_obj) = pdf.doc().dereference(pattern_obj_ref)?;
-                    let Some(obj_id) = opt_obj_id else {
-                        return Err(Error::InvalidPdfObject(
-                            "Pattern must be an indirect reference",
-                        ));
-                    };
                     match pattern_obj {
                         Object::Stream(tiling_stream) => {
+                            let Some(obj_id) = opt_obj_id else {
+                                return Err(Error::InvalidPdfObject(
+                                    "Tiling Pattern must be an indirect reference",
+                                ));
+                            };
                             return Ok(Pattern::Tiling(Arc::new(TilingPattern::resolve(
                                 obj_id,
                                 tiling_stream,
@@ -63,7 +63,7 @@ impl<'a> Pattern<'a> {
                         }
                         Object::Dictionary(shading_dict) => {
                             return Ok(Pattern::Shading(Arc::new(ShadingPattern::resolve(
-                                obj_id,
+                                opt_obj_id,
                                 shading_dict,
                                 content_resources,
                                 pdf,
@@ -281,14 +281,14 @@ object_id!(ShadingPatternId);
 /// Table 76 – Entries in a Type 2 Pattern Dictionary
 #[derive(Debug, Clone)]
 pub struct ShadingPattern {
-    pub(crate) id: ShadingPatternId,
+    pub(crate) id: Option<ShadingPatternId>,
     pub(crate) shading: Field<Shading>,
     pub(crate) matrix: Field<Matrix>,
 }
 
 impl ShadingPattern {
     /// Returns the ID of the shading pattern object.
-    pub fn id(&self) -> ShadingPatternId {
+    pub fn id(&self) -> Option<ShadingPatternId> {
         self.id
     }
 
@@ -310,12 +310,12 @@ impl ShadingPattern {
     }
 
     fn resolve(
-        id: ObjectId,
+        id: Option<ObjectId>,
         dict: &Dictionary,
         content_resources: &ContentResources,
         pdf: &Pdf,
     ) -> Result<Self> {
-        let id = ShadingPatternId(id);
+        let id = id.map(ShadingPatternId);
         let matrix = match read_optional_field(pdf, dict) {
             Some(Ok(m)) => Ok(m),
             Some(Err(e)) => Err(e.into()),
