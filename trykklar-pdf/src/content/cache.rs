@@ -36,6 +36,6 @@ pub(crate) struct WalkerCache<'a> {
     pub(crate) color_space: ResolvedCache<ColorSpace>,
     pub(crate) font: ResolvedCache<Font>,
     pub(crate) xobject: ResolvedCache<XObject<'a>>,
-    pub(crate) ext_gstate: ResolvedCache<ExtGState>,
+    pub(crate) ext_gstate: ResolvedCache<ExtGState<'a>>,
     pub(crate) pattern: ResolvedCache<Pattern<'a>>,
 }

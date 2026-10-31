@@ -96,7 +96,7 @@ pub struct InnerGraphicsState<'a> {
     pub non_stroking_overprint: Result<bool>,
     pub overprint_mode: Result<OverprintMode>,
     pub blend_mode: Result<BlendMode>,
-    pub soft_mask: Result<SoftMask>,
+    pub soft_mask: Result<SoftMask<'a>>,
     pub stroking_alpha: Result<StrokingAlpha>,
     pub non_stroking_alpha: Result<NonStrokingAlpha>,
     pub line_width: Result<LineWidth>,

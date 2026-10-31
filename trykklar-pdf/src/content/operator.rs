@@ -40,7 +40,7 @@ pub enum Operator<'a> {
     /// > `Q`: Restore graphics state
     RestoreGraphicsState,
     /// > `gs`: (PDF 1.2) Set parameters from graphics state parameter dictionary
-    SetExtGState(Box<Result<ExtGState>>),
+    SetExtGState(Box<Result<ExtGState<'a>>>),
     /// > `cm`: Concatenate matrix to current transformation matrix
     ModifyCtm(Result<Matrix>),
     /// > `d`: Set line dash pattern

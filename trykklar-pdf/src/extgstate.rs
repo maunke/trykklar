@@ -1,17 +1,20 @@
 //! Graphics State Parameter Dictionaries
 use crate::codec::{TryFromObject, TryIntoObject};
-use crate::dict::{self, DictKey, read_field, read_optional_field};
-use crate::error::{Field, FieldExt, OptionalField};
+use crate::dict::{self, DictKey, read_field, read_optional_field, read_optional_field_with_fn};
+use crate::error::{
+    Field, FieldError, FieldExt, OptionalField, OptionalFieldExt, ResultExt, ResultExtDeref,
+};
 use crate::font::Font;
-use crate::resources::ContentResources;
+use crate::resources::{ContentResources, Resources};
 use crate::text::TextFontSize;
 use crate::unit::UserSpace;
-use crate::{Error, GraphicsState, Length, ObjectAsF64, Pdf, Result, object_id};
+use crate::xobject::GroupXObject;
+use crate::{Error, GraphicsState, Length, Matrix, ObjectAsF64, Oc, Pdf, Rect, Result, object_id};
 use lopdf::{Object, dictionary};
 
 /// ISO 32000-1:2008 8.4.5 Table 58 – Entries in a Graphics State Parameter Dictionary
 #[derive(Debug, Clone)]
-pub struct ExtGState {
+pub struct ExtGState<'a> {
     // OP: sets stroking and non stroking to overprint, when op is not present
     pub(crate) overprint: OptionalField<Overprint>,
     // op
@@ -23,7 +26,7 @@ pub struct ExtGState {
     // BM
     pub(crate) blend_mode: OptionalField<BlendMode>,
     // SMask
-    pub(crate) soft_mask: OptionalField<SoftMask>,
+    pub(crate) soft_mask: OptionalField<SoftMask<'a>>,
     // CA (full transparent = 0.0)
     pub(crate) stroking_alpha: OptionalField<StrokingAlpha>,
     // ca
@@ -44,12 +47,12 @@ pub struct ExtGState {
     pub(crate) line_dash_pattern: OptionalField<LineDashPattern>,
 }
 
-impl ExtGState {
+impl<'a> ExtGState<'a> {
     /// Resolves [`ExtGState`] from the key, resources and document.
     pub fn resolve(
         extgstate_key: &[u8],
-        content_resources: &ContentResources,
-        pdf: &Pdf,
+        content_resources: &ContentResources<'a>,
+        pdf: &'a Pdf,
     ) -> Result<Self> {
         for d in content_resources.resource_dictionaries() {
             if let Ok(extgstate_dict_obj) = d.get_deref(b"ExtGState", pdf.doc()) {
@@ -102,7 +105,7 @@ impl ExtGState {
     /// > invocation of the gs operator; the supplied parameter dictionary may include any
     /// > combination of parameter entries. The results of gs shall be cumulative; parameter values
     /// > established in previous invocations persist until explicitly overridden.
-    pub fn apply_to(self, gs: &mut GraphicsState) {
+    pub fn apply_to(self, gs: &mut GraphicsState<'a>) {
         // handle overprint
         match (self.overprint, self.non_stroking_overprint) {
             (Some(overprint), None) => {
@@ -1012,7 +1015,7 @@ impl BlendMode {
 /// > the new one, rather than intersecting the two as is done with the current clipping path
 /// > parameter (see 8.5.4, "Clipping Path Operators").
 #[derive(Debug, Clone, Default)]
-pub enum SoftMask {
+pub enum SoftMask<'a> {
     /// ISO 32000-1:2008 11.6.4.3 Mask Shape and Opacity
     ///
     /// > The current soft mask parameter in the graphics state, set with the SMask entry in a
@@ -1023,15 +1026,15 @@ pub enum SoftMask {
     #[default]
     None,
     /// Name Mask, see [`Mask`].
-    Mask(Mask),
+    Mask(Mask<'a>),
 }
 
-impl DictKey for SoftMask {
+impl DictKey for SoftMask<'_> {
     const KEY: &'static [u8] = b"SMask";
 }
 
-impl TryFromObject<'_> for SoftMask {
-    fn try_from_object(pdf: &'_ Pdf, id: Option<lopdf::ObjectId>, obj: &'_ Object) -> Result<Self> {
+impl<'a> TryFromObject<'a> for SoftMask<'a> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<lopdf::ObjectId>, obj: &'a Object) -> Result<Self> {
         let obj = pdf.doc().dereference(obj)?.1;
         match obj {
             Object::Name(name) => match name.as_slice() {
@@ -1049,27 +1052,34 @@ impl TryFromObject<'_> for SoftMask {
 
 /// ISO 32000-1:2008 11.6.5.2 Table 144 – Entries in a soft-mask dictionary
 #[derive(Debug, Clone)]
-pub struct Mask {
+pub struct Mask<'a> {
     sub_type: Field<MaskSubType>,
+    group: Field<SoftMaskGroupXObject<'a>>,
 }
 
-impl Mask {
+impl<'a> Mask<'a> {
     /// Returns the Mask subtype.
     pub fn sub_type(&self) -> Field<MaskSubType> {
         self.sub_type.as_field_ref().copied()
     }
+
+    /// Returns the transparency group xobject.
+    pub fn group(&self) -> Result<&SoftMaskGroupXObject<'a>> {
+        self.group.ok_ref()
+    }
 }
 
-impl TryFromObject<'_> for Mask {
+impl<'a> TryFromObject<'a> for Mask<'a> {
     fn try_from_object(
-        pdf: &'_ Pdf,
+        pdf: &'a Pdf,
         _id: Option<lopdf::ObjectId>,
-        obj: &'_ Object,
+        obj: &'a Object,
     ) -> Result<Self> {
         let obj = pdf.doc().dereference(obj)?;
         let dict = obj.1.as_dict()?;
         let sub_type = read_field(pdf, dict);
-        Ok(Self { sub_type })
+        let group = read_field(pdf, dict);
+        Ok(Self { sub_type, group })
     }
 }
 
@@ -1114,6 +1124,144 @@ impl TryFromObject<'_> for MaskSubType {
         };
         Ok(variant)
     }
+}
+
+object_id!(SoftMaskGroupXObjectId);
+
+/// `G` Soft mask transparency group xobject
+//
+/// ISO 32000-1:2008 11.6.5.2 Table 144 – Entries in a soft-mask dictionary
+///
+/// > (Required) A transparency group XObject (see “Transparency Group XObjects”) to be used as the
+/// > source of alpha or colour values for deriving the mask. If the subtype S is Luminosity, the
+/// > group attributes dictionary shall contain a CS entry defining the colour space in which the
+/// > compositing computation is to be performed.
+///
+/// A wrapping of the [`crate::FormXObject`] is not desired since the group is required to be
+/// present. Of course the resolve method could be re-used and on try from object the group gets
+/// required. But the internal state of the wrapper would not provide the existence. So no try for
+/// premature DRY here.
+#[derive(Debug, Clone)]
+pub struct SoftMaskGroupXObject<'a> {
+    id: SoftMaskGroupXObjectId,
+    oc: OptionalField<Oc>,
+    bbox: Field<Rect<UserSpace>>,
+    matrix: Result<Matrix>,
+    resources: OptionalField<Resources<'a>>,
+    content: Result<Vec<u8>>,
+    group: Result<GroupXObject>,
+}
+
+impl<'a> SoftMaskGroupXObject<'a> {
+    /// Returns the ID of the form xobject object.
+    pub fn id(&self) -> SoftMaskGroupXObjectId {
+        self.id
+    }
+
+    /// Returns the optional content.
+    ///
+    /// > (Optional; PDF 1.5) An optional content group or optional content membership dictionary
+    /// > (see 8.11, "Optional Content") specifying the optional content properties for the form
+    /// > XObject. Before the form is processed, its visibility shall be determined based on this
+    /// > entry. If it is determined to be invisible, the entire form shall be skipped, as if there
+    /// > were no Do operator to invoke it.
+    pub fn oc(&self) -> &OptionalField<Oc> {
+        &self.oc
+    }
+
+    /// Returns the bounding box.
+    pub fn bbox(&self) -> Field<&Rect<UserSpace>> {
+        self.bbox.as_field_ref()
+    }
+
+    /// Returns the form matrix.
+    ///
+    /// > (Optional) An array of six numbers specifying the form matrix, which maps form space into
+    /// > user space (see 8.3.4, "Transformation Matrices").
+    /// >
+    /// > Default value: the identity matrix `[ 1 0 0 1 0 0 ]`.
+    pub fn matrix(&self) -> Result<&Matrix> {
+        self.matrix.ok_ref()
+    }
+
+    /// The content of the form xobject.
+    pub fn content(&self) -> Result<&[u8]> {
+        self.content.ok_deref()
+    }
+
+    /// Returns the [`GroupXObject`].
+    pub fn group(&self) -> Result<&GroupXObject> {
+        self.group.ok_ref()
+    }
+
+    /// Returns the resources dictionary.
+    ///
+    /// > (Optional but strongly recommended; PDF 1.2) A dictionary specifying any resources (such
+    /// > as fonts and images) required by the form XObject (see 7.8, "Content Streams and
+    /// > Resources").
+    /// >
+    /// > In a PDF whose version is 1.1 and earlier, all named resources used in the
+    /// > form XObject shall be included in the resource dictionary of each page object on which the
+    /// > form XObject appears, regardless of whether they also appear in the resource dictionary of
+    /// > the form XObject. These resources should also be specified in the form XObject’s resource
+    /// > dictionary as well, to determine which resources are used inside the form XObject. If a
+    /// > resource is included in both dictionaries, it shall have the same name in both locations.
+    /// >
+    /// > In PDF 1.2 and later versions, form XObjects may be independent of the content streams in
+    /// > which they appear, and this is strongly recommended although not required. In an
+    /// > independent form XObject, the resource dictionary of the form XObject is required and
+    /// > shall contain all named resources used by the form XObject. These resources shall not be
+    /// > promoted to the outer content stream’s resource dictionary, although that stream’s
+    /// > resource dictionary refers to the form XObject.
+    pub fn resources(&self) -> OptionalField<&Resources<'a>> {
+        self.resources.as_field_ref()
+    }
+}
+
+impl<'a> TryFromObject<'a> for SoftMaskGroupXObject<'a> {
+    fn try_from_object(pdf: &'a Pdf, id: Option<lopdf::ObjectId>, obj: &'a Object) -> Result<Self> {
+        let stream = obj.as_stream()?;
+        let Some(id) = id else {
+            return Err(Error::InvalidPdfObject(
+                "soft mask group must be indirect reference",
+            ));
+        };
+        let dict = &stream.dict;
+        let id = SoftMaskGroupXObjectId(id);
+        let oc = read_optional_field_with_fn(pdf, dict, |obj| {
+            Oc::resolve(obj, &ContentResources::Empty, pdf)
+        });
+        let bbox = read_field(pdf, dict);
+        let matrix = match read_optional_field(pdf, dict) {
+            Some(Ok(m)) => Ok(m),
+            Some(Err(e)) => Err(e),
+            None => Ok(Matrix::IDENTITY),
+        };
+        let resources = read_optional_field(pdf, dict);
+        let content = stream.get_plain_content().map_err(Into::into);
+        let group = match read_field(pdf, dict) {
+            Err(FieldError::Missing) => {
+                return Err(Error::InvalidPdfObject(
+                    "soft mask group must be a transparency group",
+                ));
+            }
+            Err(FieldError::Invalid(e)) => Err(e.into()),
+            Ok(g) => Ok(g),
+        };
+        Ok(Self {
+            id,
+            oc,
+            bbox,
+            matrix,
+            resources,
+            content,
+            group,
+        })
+    }
+}
+
+impl DictKey for SoftMaskGroupXObject<'_> {
+    const KEY: &'static [u8] = b"G";
 }
 
 /// `/Font` Font
