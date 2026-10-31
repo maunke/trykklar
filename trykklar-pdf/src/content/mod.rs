@@ -1,5 +1,6 @@
 //! Content Stream Utilities
 mod cache;
+mod category;
 mod context;
 mod operator;
 mod state;
@@ -18,6 +19,7 @@ use crate::unit::UserSpace;
 use crate::xobject::{FormXObject, FormXObjectId, XObject};
 use crate::{Error, Length, Matrix, Pdf, Rect, Result, TilingPattern, UserUnit};
 pub(crate) use cache::{ResolvedCache, WalkerCache};
+pub use category::OperatorCategory;
 pub use context::WalkerContext;
 use lopdf::content::{Content, Operation};
 pub use operator::Operator;
@@ -232,6 +234,11 @@ impl<'a> ContentWalkerStep<'a> {
             Some(r) => *r,
             None => ContentReference::Page(self.page_id),
         }
+    }
+
+    /// Returns the [`OperatorCategory`]
+    pub fn category(&self) -> OperatorCategory {
+        self.operator().into()
     }
 
     fn clip_bbox(&self, bbox: &Result<BBox<UserSpace>>) -> Result<BBox<UserSpace>> {
