@@ -410,8 +410,8 @@ impl Ocmd {
     }
 
     /// Returns the visibility policy.
-    pub fn policy(&self) -> Result<&OcmdPolicy> {
-        self.policy.ok_ref()
+    pub fn policy(&self) -> Result<OcmdPolicy> {
+        self.policy.ok_ref().copied()
     }
 }
 
@@ -421,7 +421,7 @@ impl Ocmd {
 /// > dictionary.
 ///
 /// > Default value: AnyOn
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum OcmdPolicy {
     /// > AllOn visible only if all of the entries in OCGs are ON
     AllOn,
