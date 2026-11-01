@@ -1245,7 +1245,7 @@ impl<'a> TryFromObject<'a> for SoftMaskGroupXObject<'a> {
                     "soft mask group must be a transparency group",
                 ));
             }
-            Err(FieldError::Invalid(e)) => Err(e.into()),
+            Err(FieldError::Invalid(e)) => Err(e),
             Ok(g) => Ok(g),
         };
         Ok(Self {
