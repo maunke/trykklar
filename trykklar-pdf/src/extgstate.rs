@@ -1026,7 +1026,7 @@ pub enum SoftMask<'a> {
     #[default]
     None,
     /// Name Mask, see [`Mask`].
-    Mask(Mask<'a>),
+    Mask(Box<Mask<'a>>),
 }
 
 impl DictKey for SoftMask<'_> {
@@ -1043,7 +1043,7 @@ impl<'a> TryFromObject<'a> for SoftMask<'a> {
             },
             Object::Dictionary(_) => {
                 let mask = Mask::try_from_object(pdf, id, obj);
-                mask.map(Self::Mask)
+                mask.map(|m| Self::Mask(m.into()))
             }
             _ => Err(Error::InvalidPdfObject("Softmask must be a name or dict")),
         }
