@@ -67,6 +67,7 @@ pub struct ContentWalker<'a> {
     tiled_region: Option<Result<BBox<UserSpace>>>,
     // Manages oc stack introduced by marked content operators.
     oc_stack: Vec<Result<Option<Result<Oc>>>>,
+    oc_floor: usize,
     current_path: CurrentPath,
     subpath_start: Option<Result<Point<UserSpace>>>,
     current_point: Option<Result<Point<UserSpace>>>,
@@ -362,6 +363,7 @@ impl<'a> ContentWalker<'a> {
         graphics_state.clipping_bbox = media_box.map(|mb| mb.get().into());
         let graphics_stack = Vec::new();
         let oc_stack = Vec::new();
+        let oc_floor = oc_stack.len();
         let current_path = CurrentPath::default();
         let subpath_start = None;
         let current_point = None;
@@ -384,6 +386,7 @@ impl<'a> ContentWalker<'a> {
             base_ctm: Ok(Matrix::IDENTITY),
             tiled_region: None,
             oc_stack,
+            oc_floor,
             current_path,
             subpath_start,
             current_point,
@@ -437,10 +440,11 @@ impl<'a> ContentWalker<'a> {
         // transparency group handling
         form.apply_to_graphics_state(&mut graphics_state);
 
-        let oc_stack = match form.oc() {
-            Some(oc) => vec![Ok(Some(oc.clone()))],
-            None => vec![],
-        };
+        let mut oc_stack = self.oc_stack.clone();
+        if let Some(form_oc) = form.oc() {
+            oc_stack.push(Ok(Some(form_oc.clone())));
+        }
+        let oc_floor = oc_stack.len();
         let current_path = CurrentPath::default();
         let subpath_start = None;
         let current_point = None;
@@ -467,6 +471,7 @@ impl<'a> ContentWalker<'a> {
             graphics_state,
             graphics_stack: Default::default(),
             oc_stack,
+            oc_floor,
             current_path,
             subpath_start,
             current_point,
@@ -511,7 +516,8 @@ impl<'a> ContentWalker<'a> {
             (Err(e), _) => Err(e.clone()),
             (_, Err(e)) => Err(e),
         };
-        let oc_stack = vec![];
+        let oc_stack = self.oc_stack.clone();
+        let oc_floor = oc_stack.len();
         let current_path = CurrentPath::default();
         let subpath_start = None;
         let current_point = None;
@@ -538,6 +544,7 @@ impl<'a> ContentWalker<'a> {
             graphics_state,
             graphics_stack: Default::default(),
             oc_stack,
+            oc_floor,
             current_path,
             subpath_start,
             current_point,
@@ -813,8 +820,12 @@ impl<'a> ContentWalker<'a> {
                 }
             },
             Operator::BeginMarkedContent { oc } => self.oc_stack.push(oc),
-            Operator::EndMarkedContent if self.oc_stack.pop().is_none() => {
-                return Err(Error::InvalidOcStack);
+            Operator::EndMarkedContent => {
+                if self.oc_stack.len() > self.oc_floor {
+                    self.oc_stack.pop();
+                } else {
+                    return Err(Error::InvalidOcStack);
+                }
             }
             Operator::SetLineWidth(width) => self.graphics_state.line_width = width,
             Operator::SetExtGState(extgstate) => match &*extgstate {
