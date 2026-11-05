@@ -149,10 +149,10 @@ pub enum Operator<'a> {
     /// ISO 32000-1:2008 Table 32
     /// > `BX`: (PDF 1.1) Begin a compatibility section. Unrecognized operators (along with their
     /// > operands) shall be ignored without error until the balancing EX operator is encountered.
-    BeginCompatilitySection,
+    BeginCompatibilitySection,
     /// > `EX`: (PDF 1.1) End a compatibility section begun by a balancing BX operator. Ignore any
     /// > unrecognized operands and operators from previous matching BX onward.
-    EndCompatilitySection,
+    EndCompatibilitySection,
     /// ISO 32000-1:2008 Table 113 Type 3 font operators
     /// > `d0`: Set glyph width in Type 3 font
     ///
@@ -451,8 +451,8 @@ impl<'a> Operator<'a> {
             // This has a low prio, since inline images are not used in packaging design context.
             "BI" | "ID" | "EI" => return Err(Error::InlineImageUnsupported),
             // Table 32 - Compatibility Section
-            "BX" => Self::BeginCompatilitySection,
-            "EX" => Self::EndCompatilitySection,
+            "BX" => Self::BeginCompatibilitySection,
+            "EX" => Self::EndCompatibilitySection,
             _ => return Err(Error::InvalidOperator),
         };
         Ok(op)
