@@ -126,9 +126,9 @@ impl From<&Operator<'_>> for OperatorCategory {
             Operator::MarkedContentPoint
             | Operator::BeginMarkedContent { .. }
             | Operator::EndMarkedContent => Self::MarkedContent,
-            Operator::BeginCompatibilitySection | Operator::EndCompatibilitySection => {
-                Self::Compatibility
-            }
+            Operator::BeginCompatibilitySection
+            | Operator::EndCompatibilitySection
+            | Operator::Unrecognized => Self::Compatibility,
         }
     }
 }

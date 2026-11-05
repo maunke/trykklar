@@ -98,6 +98,9 @@ pub enum Error {
     /// Invalid optional content stack.
     #[error("invalid oc stack")]
     InvalidOcStack,
+    /// Invalid compatibility section stack
+    #[error("invalid compatibility section stack")]
+    InvalidCompatibilitySectionStack,
     /// Specified resource could not be found.
     #[error("{kind:?} resource not found")]
     ResourceNotFound {

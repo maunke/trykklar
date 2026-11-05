@@ -153,6 +153,10 @@ pub enum Operator<'a> {
     /// > `EX`: (PDF 1.1) End a compatibility section begun by a balancing BX operator. Ignore any
     /// > unrecognized operands and operators from previous matching BX onward.
     EndCompatibilitySection,
+    /// Unrecognized Operator
+    ///
+    /// This is used in the context of an unrecognized operator in a compatibility section.
+    Unrecognized,
     /// ISO 32000-1:2008 Table 113 Type 3 font operators
     /// > `d0`: Set glyph width in Type 3 font
     ///
