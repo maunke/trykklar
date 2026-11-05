@@ -1360,7 +1360,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "trykklar"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "hayro",
  "lopdf",
@@ -1370,7 +1370,7 @@ dependencies = [
 
 [[package]]
 name = "trykklar-examples"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1379,7 +1379,7 @@ dependencies = [
 
 [[package]]
 name = "trykklar-pdf"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "hayro-jpeg2000 0.4.1",
  "lopdf",
@@ -1577,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
