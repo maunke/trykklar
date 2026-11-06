@@ -174,6 +174,7 @@ impl<'a> Operator<'a> {
         content_resources: &ContentResources<'a>,
         pdf: &'a Pdf,
         cache: &mut WalkerCache<'a>,
+        comp_section_stack: usize,
     ) -> Result<Self> {
         let operands = &operation.operands;
         let op = match operation.operator.as_str() {
@@ -457,6 +458,7 @@ impl<'a> Operator<'a> {
             // Table 32 - Compatibility Section
             "BX" => Self::BeginCompatibilitySection,
             "EX" => Self::EndCompatibilitySection,
+            _ if comp_section_stack > 0 => Self::Unrecognized,
             _ => return Err(Error::InvalidOperator),
         };
         Ok(op)

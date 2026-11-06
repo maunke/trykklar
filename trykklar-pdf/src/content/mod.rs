@@ -732,16 +732,13 @@ impl<'a> ContentWalker<'a> {
         };
         self.step += 1;
 
-        let operator = match Operator::resolve(
+        let operator = Operator::resolve(
             &raw_operation,
             &self.content_resources,
             self.pdf,
             &mut self.cache,
-        ) {
-            Ok(op) => op,
-            Err(_) if self.comp_section_stack > 0 => Operator::Unrecognized,
-            Err(e) => return Err(e),
-        };
+            self.comp_section_stack,
+        )?;
 
         // Graphics State Handling
         match operator.clone() {
