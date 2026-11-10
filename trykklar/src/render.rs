@@ -141,10 +141,13 @@ impl Renderer {
     }
 
     /// Sets the oc config of the PDF and returns a new renderer instance.
+    ///
+    /// If no oc properties are set in the catalog, the given config has no effect.
     pub fn with_oc_config(mut self, config: OcConfig) -> Result<Self> {
-        let mut oc_props = OCPropertiesMut::try_from(&mut self.pdf)?;
-        oc_props.set_default_config(config.clone())?;
-        self.renderer_pdf = Self::pdf_to_renderer_pdf(&mut self.pdf)?;
+        if let Ok(mut oc_props) = OCPropertiesMut::try_from(&mut self.pdf) {
+            oc_props.set_default_config(config.clone())?;
+            self.renderer_pdf = Self::pdf_to_renderer_pdf(&mut self.pdf)?;
+        }
         Ok(self)
     }
 
